@@ -4,8 +4,22 @@ Private multiplayer blackjack with a basic-strategy coach. Zero dependencies —
 one Node server (`table-server.js`) serves the live table (`/`), the solo
 trainer (`/blackjack-trainer.html`), and the Vegas playbook (`/vegas-playbook.html`).
 
-Every game lives at a private table code (share link like `/?t=K7Q4`), so
+Every game lives at a table code (share link like `/?t=K7Q4`). Public tables
+show up in the lobby for anyone to join; private ones are join-by-code only, so
 strangers who find the site can't wander into your game.
+
+## Tables, hosts, bots & rules
+
+- **The lobby** lists open public tables (host, seats, rules) — click to sit.
+  Private tables are hidden and joined only by their code.
+- **The host** is the first human to sit at a table. Only the host can add/remove
+  bots and change the house rules (between hands): blackjack payout **3:2 or 6:5**,
+  number of **decks** (1/2/4/6/8), dealer **hits or stands soft 17**, **double
+  after split** on/off, and **late surrender** on/off.
+- **Bots** fill empty seats and play themselves — "book" bots play perfect basic
+  strategy, "loose" bots make tourist mistakes. They use house money, never the cage.
+- **Cash out** any time from the betting screen (or after a hand) — you drop back
+  to the lobby with your chips banked, not forced into another hand.
 
 ## Run it at home
 
@@ -41,7 +55,7 @@ Suggested subdomain: **table7.yourdomain.com** (short, on-brand).
 ## The Pit Boss console
 
 `/admin` is the house control room: see every cage account and open table,
-and credit (or dock) anyone's cage cash. It's protected by a key:
+credit or dock anyone's cage cash, and delete accounts. It's protected by a key:
 
 - Locally the key is printed in the server console at every start.
 - For a permanent key (do this on Railway): set the `TABLE_ADMIN_KEY`
@@ -62,7 +76,7 @@ and credit (or dock) anyone's cage cash. It's protected by a key:
   directory if you want the ledger to survive deploys.
 - Open tables live in memory: a restart or redeploy closes them (cage
   balances survive if the file does; everyone just rejoins).
-- Tables close themselves after ~20 minutes with nobody around; max 50 tables
-  at once; 4 seats per table.
+- Tables close themselves after ~20 minutes with no humans around; max 50 tables
+  at once; up to 6 seats per table (players + bots).
 - Only the five game pages are ever served — nothing else in the repo/folder
   is reachable from the internet.

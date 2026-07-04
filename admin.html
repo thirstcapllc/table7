@@ -34,6 +34,7 @@
   }
   button.primary { background: var(--gold); color: #1a1a1a; border-color: var(--gold); }
   button.credit { background: var(--green); border-color: var(--green); color: #fff; }
+  button.del { background: var(--red); border-color: var(--red); color: #fff; }
   input {
     padding: 7px 9px; border-radius: 8px; border: 1px solid var(--line);
     background: var(--card2); color: var(--cream); font-family: Verdana, sans-serif; font-size: 0.85rem;
@@ -140,6 +141,7 @@
           '<button class="credit" data-t="' + a.token + '" data-a="1000">+$1,000</button>' +
           '<input class="amt" type="number" step="5" placeholder="±$" data-for="' + a.token + '">' +
           '<button class="apply" data-t="' + a.token + '">Apply</button>' +
+          '<button class="del" data-t="' + a.token + '" data-n="' + esc(a.name) + '" title="Delete account">🗑</button>' +
         '</td></tr>';
     });
     $('accRows').innerHTML = rows || '<tr><td colspan="5" class="muted">No accounts yet — the cage is quiet.</td></tr>';
@@ -173,10 +175,22 @@
     });
   }
 
+  function deleteUser(token, name) {
+    if (!window.confirm('Delete ' + name + '’s account for good? Their chips and cage cash vanish and they get bounced from any table.')) return;
+    post('/api/admin/delete', { token: token }).then(function (res) {
+      if (res.status === 403) { lockUp('That key stopped working.'); return; }
+      if (res.data.error) { status(res.data.error, 'err'); return; }
+      status('Deleted ' + name + '’s account.', 'good');
+      refresh();
+    });
+  }
+
   document.addEventListener('click', function (e) {
     var b = e.target;
     if (b.classList && b.classList.contains('credit')) {
       credit(b.dataset.t, Number(b.dataset.a));
+    } else if (b.classList && b.classList.contains('del')) {
+      deleteUser(b.dataset.t, b.dataset.n || 'this');
     } else if (b.classList && b.classList.contains('apply')) {
       var inp = document.querySelector('input.amt[data-for="' + b.dataset.t + '"]');
       var amt = Math.round(Number(inp && inp.value));

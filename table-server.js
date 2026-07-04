@@ -5,15 +5,14 @@
 //
 // The casino:
 //   - THE CAGE: every visitor gets a persistent account (cage-data.json).
-//     New players are staked $1,000. You buy chips into a table and color up
-//     back to cash when you leave — winnings survive between sessions.
-//   - TABLES: private rooms with 4-char codes, share links like /?t=K7Q4.
-//   - WEBSOCKETS: hand-rolled RFC-6455 server (no npm packages). State is
-//     pushed instantly, and when someone closes their tab the table notices
-//     within seconds, banks their chips at the cage, and frees the seat.
-//
-// Rules: 6 decks, blackjack pays 3:2, dealer hits soft 17, double after split,
-// split up to 4 hands, split aces get one card, insurance on a dealer ace.
+//     New players are staked $1,000. Buy chips into a table, color up when you
+//     leave — winnings survive between sessions.
+//   - TABLES: rooms with 4-char codes. The first human to sit is the HOST and
+//     can add bots and set the rules (payout 3:2 or 6:5, decks, dealer soft 17,
+//     double-after-split, surrender). Public tables show in the lobby; private
+//     ones are join-by-code only.
+//   - WEBSOCKETS: hand-rolled RFC-6455 server (no npm packages). State pushes
+//     instantly; close a tab and the table banks your chips and frees the seat.
 
 'use strict';
 const http = require('http');
@@ -25,18 +24,20 @@ const crypto = require('crypto');
 const PORT = process.env.PORT || 7777;
 const FAST = !!process.env.TABLE_FAST;          // used by automated tests
 const DEALER_MS = FAST ? 0 : 800;               // dealer draw cadence
+const BOT_MS = FAST ? 5 : 750;                  // bot "thinking" delay
 const TURN_TIMEOUT_MS = FAST ? 3600000 : 45000; // auto-stand a present-but-idle player
 const INS_TIMEOUT_MS = FAST ? 3600000 : 30000;
 const PRESENCE_MS = Number(process.env.TABLE_PRESENCE_MS) || (FAST ? 3600000 : 12000);
 const ROOM_IDLE_MS = FAST ? 3600000 : 20 * 60000;
 const MAX_ROOMS = 50;
+const MAX_SEATS = 6;
 const START_CASH = 1000;   // the cage stakes every new player
 const COMP_CASH = 500;     // pity stake when you go broke
 const ROOT = __dirname;
 
 // Pit Boss key: set TABLE_ADMIN_KEY for a stable key (e.g. on Railway);
 // otherwise a fresh one is generated and printed at boot.
-const ADMIN_KEY = process.env.TABLE_ADMIN_KEY || require('crypto').randomBytes(6).toString('hex');
+const ADMIN_KEY = process.env.TABLE_ADMIN_KEY || crypto.randomBytes(6).toString('hex');
 
 function isAdmin(key) {
   const a = crypto.createHash('sha256').update(String(key || '')).digest();
@@ -44,7 +45,7 @@ function isAdmin(key) {
   return crypto.timingSafeEqual(a, b);
 }
 
-// ---------- blackjack engine (same rules as the trainer) ----------
+// ---------- blackjack engine ----------
 const SUITS = ['♠', '♥', '♦', '♣'];
 const RANKS = [
   { r: 'A', v: 11 }, { r: '2', v: 2 }, { r: '3', v: 3 }, { r: '4', v: 4 },
@@ -79,6 +80,36 @@ function isBlackjack(cards) {
 }
 
 function fmt(n) { return (n % 1 === 0) ? '$' + n : '$' + n.toFixed(2); }
+
+// Multi-deck H17 basic strategy (used by bots). Returns 'H'|'S'|'D'|'P'.
+function basicStrategy(cards, up, canDouble, canSplit) {
+  const hv = handValue(cards);
+  const t = hv.total;
+  if (canSplit && cards.length === 2 && cards[0].v === cards[1].v) {
+    const p = cards[0].v;
+    if (p === 11 || p === 8) return 'P';
+    if (p === 9 && up !== 7 && up !== 10 && up !== 11) return 'P';
+    if (p === 7 && up <= 7) return 'P';
+    if (p === 6 && up <= 6) return 'P';
+    if (p === 4 && (up === 5 || up === 6)) return 'P';
+    if ((p === 3 || p === 2) && up <= 7) return 'P';
+  }
+  if (hv.soft) {
+    if (t >= 20) return 'S';
+    if (t === 19) return (up === 6 && canDouble) ? 'D' : 'S';
+    if (t === 18) { if (up <= 6) return canDouble ? 'D' : 'S'; if (up <= 8) return 'S'; return 'H'; }
+    if (t === 17) return (up >= 3 && up <= 6 && canDouble) ? 'D' : 'H';
+    if (t >= 15) return (up >= 4 && up <= 6 && canDouble) ? 'D' : 'H';
+    return (up >= 5 && up <= 6 && canDouble) ? 'D' : 'H';
+  }
+  if (t <= 8) return 'H';
+  if (t === 9) return (up >= 3 && up <= 6 && canDouble) ? 'D' : 'H';
+  if (t === 10) return (up <= 9 && canDouble) ? 'D' : 'H';
+  if (t === 11) return canDouble ? 'D' : 'H';
+  if (t === 12) return (up >= 4 && up <= 6) ? 'S' : 'H';
+  if (t <= 16) return (up <= 6) ? 'S' : 'H';
+  return 'S';
+}
 
 // ---------- the cage (persistent accounts) ----------
 const CAGE_FILE = process.env.TABLE_CAGE_FILE || path.join(ROOT, 'cage-data.json');
@@ -123,6 +154,7 @@ function getAccount(token) {
 
 // ---------- rooms ----------
 const rooms = new Map();
+const BOT_NAMES = ['Chad', 'Doris', 'Reno', 'Vinny', 'Lola', 'Ace', 'Mitzi', 'Duke', 'Sunny', 'Cash'];
 
 const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 function newCode() {
@@ -133,22 +165,50 @@ function newCode() {
   }
 }
 
-function freshGame(code) {
+function sanitizeConfig(c) {
+  c = c || {};
+  const decks = [1, 2, 4, 6, 8].includes(+c.decks) ? +c.decks : 6;
+  return {
+    public: c.public !== false,
+    decks: decks,
+    payout: c.payout === '6:5' ? '6:5' : '3:2',
+    h17: c.h17 !== false,     // dealer hits soft 17 (default true — most Vegas)
+    das: c.das !== false,     // double after split allowed
+    surrender: !!c.surrender  // late surrender
+  };
+}
+
+function rulesLine(cfg) {
+  return [
+    cfg.decks + ' decks',
+    'blackjack pays ' + cfg.payout,
+    'dealer ' + (cfg.h17 ? 'hits' : 'stands') + ' soft 17',
+    cfg.das ? 'double after split' : 'no DAS',
+    cfg.surrender ? 'surrender offered' : 'no surrender'
+  ].join(' · ');
+}
+
+function freshGame(code, config) {
+  const cfg = sanitizeConfig(config);
   return {
     code,
-    shoe: buildShoe(6),
+    config: cfg,
+    decks: cfg.decks,
+    shoe: buildShoe(cfg.decks),
     phase: 'betting',   // betting | insurance | acting | dealer | settle
     round: 0,
     dealer: [],
     holeHidden: true,
     players: [],
+    hostId: null,
     turn: null,
     turnAt: 0,
+    turnToken: 0,
     insuranceAt: 0,
     version: 1,
     lastActivity: Date.now(),
     log: [],
-    conns: new Set(),   // live websocket connections
+    conns: new Set(),
     pendingPush: false
   };
 }
@@ -169,6 +229,7 @@ function freshPlayer(name, seat, token, buyIn) {
   return {
     id: Math.random().toString(36).slice(2, 10) + Date.now().toString(36),
     name, seat, token,
+    isBot: false, botStyle: null, leaveAfter: false,
     bankroll: buyIn, rebuys: 0,
     bet: 0, inRound: false,
     hands: [], activeHand: 0,
@@ -177,48 +238,136 @@ function freshPlayer(name, seat, token, buyIn) {
   };
 }
 
-function bettors(g) {
-  return g.players.filter(p => p.inRound).sort((a, b) => a.seat - b.seat);
-}
-
-function playerById(g, id) {
-  return g.players.find(p => p.id === id) || null;
-}
-
+function decks(g) { return g.config.decks; }
+function bjMultiplier(g) { return g.config.payout === '6:5' ? 1.2 : 1.5; }
+function bettors(g) { return g.players.filter(p => p.inRound).sort((a, b) => a.seat - b.seat); }
+function playerById(g, id) { return g.players.find(p => p.id === id) || null; }
+function humans(g) { return g.players.filter(p => !p.isBot); }
 function draw(g) { return g.shoe.pop(); }
-
-function dealerUpValue(g) {
-  const c = g.dealer[0];
-  return c.r === 'A' ? 11 : c.v;
-}
+function dealerUpValue(g) { const c = g.dealer[0]; return c.r === 'A' ? 11 : c.v; }
 
 function hasConn(g, playerId) {
   for (const c of g.conns) if (c.playerId === playerId && !c.dead) return true;
   return false;
 }
-
 function isPresent(g, p) {
+  if (p.isBot) return true;
   return hasConn(g, p.id) || (Date.now() - p.lastSeen < PRESENCE_MS);
 }
 
-// color up: table chips go back to the player's cage account
+// the first human by seat is the host; reassigns if the host leaves
+function ensureHost(g) {
+  if (g.hostId && playerById(g, g.hostId) && !playerById(g, g.hostId).isBot) return;
+  const h = humans(g).sort((a, b) => a.seat - b.seat)[0];
+  const newId = h ? h.id : null;
+  if (newId !== g.hostId) {
+    g.hostId = newId;
+    if (h) log(g, h.name + ' is now the table host.');
+  }
+}
+
+function freeSeat(g) {
+  const taken = g.players.map(q => q.seat);
+  let seat = 1;
+  while (taken.includes(seat)) seat++;
+  return seat;
+}
+
+// color up: table chips go back to the player's cage account (humans only)
 function colorUp(g, p, reason) {
-  const { acc } = getAccount(p.token);
-  acc.cash += p.bankroll;
-  saveCageSoon();
+  let cash = null;
+  if (!p.isBot) {
+    const { acc } = getAccount(p.token);
+    acc.cash += p.bankroll;
+    saveCageSoon();
+    cash = acc.cash;
+  }
   const chips = p.bankroll;
   g.players = g.players.filter(q => q.id !== p.id);
   log(g, p.name + ' colors up ' + fmt(chips) + ' and ' + (reason || 'heads to the cage.'));
-  return acc.cash;
+  ensureHost(g);
+  return cash;
+}
+
+// ---------- bots ----------
+function addBot(g, style) {
+  if (g.players.length >= MAX_SEATS) return 'Table is full.';
+  const used = new Set(g.players.filter(p => p.isBot).map(p => p.name));
+  const name = BOT_NAMES.find(n => !used.has(n)) || ('Bot' + (g.players.length + 1));
+  const bot = freshPlayer(name, freeSeat(g), null, 1000);
+  bot.isBot = true;
+  bot.botStyle = style === 'gut' ? 'gut' : 'book';
+  g.players.push(bot);
+  log(g, name + ' (bot) takes a seat.');
+  if (g.phase === 'betting') setBotBet(g, bot);
+  return null;
+}
+
+function removeBot(g, botId) {
+  const bot = playerById(g, botId);
+  if (!bot || !bot.isBot) return 'No such bot.';
+  if (bot.inRound && g.phase !== 'betting' && g.phase !== 'settle') return 'Wait for the hand to finish.';
+  g.players = g.players.filter(p => p.id !== botId);
+  log(g, bot.name + ' (bot) leaves the table.');
+  return null;
+}
+
+function setBotBet(g, bot) {
+  if (bot.bankroll < 50) bot.bankroll = 1000; // house keeps bots stocked
+  const base = bot.botStyle === 'gut' ? 15 : 25;
+  bot.bet = Math.min(base, bot.bankroll, 500);
+}
+
+function placeBotBets(g) {
+  for (const p of g.players) if (p.isBot) setBotBet(g, p);
+}
+
+// decide a bot action for the current hand
+function botDecide(g, bot) {
+  const h = bot.hands[bot.activeHand];
+  const affordDouble = h.cards.length === 2 && bot.bankroll >= h.bet &&
+    (!h.fromSplit || g.config.das);
+  const affordSplit = h.cards.length === 2 && h.cards[0].v === h.cards[1].v &&
+    bot.hands.length < 4 && bot.bankroll >= h.bet && !h.fromSplit;
+  let move = basicStrategy(h.cards, dealerUpValue(g), affordDouble, affordSplit);
+  if (move === 'D' && !affordDouble) move = 'H';
+  if (move === 'P' && !affordSplit) move = basicStrategy(h.cards, dealerUpValue(g), affordDouble, false);
+  // "gut" bots make tourist mistakes
+  if (bot.botStyle === 'gut') {
+    const hv = handValue(h.cards);
+    if (move === 'D' && hv.soft) move = 'H';
+    else if (move === 'D' && Math.random() < 0.4) move = 'H';
+    else if (move === 'H' && !hv.soft && hv.total >= 12 && hv.total <= 16 &&
+      dealerUpValue(g) >= 7 && Math.random() < 0.4) move = 'S';
+  }
+  return move;
+}
+
+function scheduleBot(g) {
+  if (g.phase !== 'acting') return;
+  const p = playerById(g, g.turn);
+  if (!p || !p.isBot) return;
+  const token = g.turnToken;
+  setTimeout(() => botStep(g, p.id, token), BOT_MS);
+}
+
+function botStep(g, botId, token) {
+  if (!rooms.has(g.code)) return;
+  if (g.phase !== 'acting' || g.turn !== botId || g.turnToken !== token) return;
+  const bot = playerById(g, botId);
+  if (!bot || !bot.isBot) return;
+  act(g, bot, botDecide(g, bot));
+  // a plain hit keeps the turn — keep the bot going
+  if (g.phase === 'acting' && g.turn === botId) scheduleBot(g);
 }
 
 // ---------- round flow ----------
 function startRound(g, starter) {
   const bs = g.players.filter(p => p.bet >= 5 && p.bet <= p.bankroll);
   if (!bs.length) return 'No bets on the felt yet.';
-  if (g.shoe.length < 120) {
-    g.shoe = buildShoe(6);
-    log(g, 'Dealer shuffles a fresh six-deck shoe.');
+  if (g.shoe.length < decks(g) * 15 + 12) {
+    g.shoe = buildShoe(decks(g));
+    log(g, 'Dealer shuffles a fresh ' + decks(g) + '-deck shoe.');
   }
   g.round++;
   g.dealer = [];
@@ -228,7 +377,7 @@ function startRound(g, starter) {
       p.inRound = true;
       p.bankroll -= p.bet;
       p.hands = [{ cards: [], bet: p.bet, done: false, busted: false,
-        settled: false, result: null, resultCls: '', splitAces: false }];
+        settled: false, result: null, resultCls: '', splitAces: false, fromSplit: false }];
       p.activeHand = 0;
       p.insurance = null;
       p.insured = false;
@@ -249,6 +398,14 @@ function startRound(g, starter) {
     g.phase = 'insurance';
     g.insuranceAt = Date.now();
     log(g, 'Insurance is open.');
+    // bots decide insurance instantly (book declines; gut bots dabble)
+    for (const p of bettors(g)) {
+      if (!p.isBot) continue;
+      const take = p.botStyle === 'gut' && Math.random() < 0.3 && p.bankroll >= p.bet / 2;
+      if (take) { p.bankroll -= p.bet / 2; p.insured = true; p.insurance = 'yes'; }
+      else p.insurance = 'no';
+    }
+    if (allInsuranceAnswered(g)) resolvePeek(g);
   } else {
     resolvePeek(g);
   }
@@ -263,6 +420,7 @@ function allInsuranceAnswered(g) {
 function resolvePeek(g) {
   const up = dealerUpValue(g);
   const dBJ = isBlackjack(g.dealer);
+  const mult = bjMultiplier(g);
 
   if ((up === 10 || up === 11) && dBJ) {
     g.holeHidden = false;
@@ -283,6 +441,7 @@ function resolvePeek(g) {
     g.phase = 'settle';
     g.turn = null;
     log(g, 'Dealer has blackjack.');
+    finishSettle(g);
     return;
   }
 
@@ -291,10 +450,10 @@ function resolvePeek(g) {
   for (const p of bettors(g)) {
     const h = p.hands[0];
     if (isBlackjack(h.cards)) {
-      p.bankroll += h.bet * 2.5;
-      h.result = 'Blackjack! +' + fmt(h.bet * 1.5); h.resultCls = 'win';
+      p.bankroll += h.bet * (1 + mult);
+      h.result = 'Blackjack! +' + fmt(h.bet * mult); h.resultCls = 'win';
       h.done = true; h.settled = true;
-      log(g, p.name + ' has blackjack! Paid 3:2.');
+      log(g, p.name + ' has blackjack! Paid ' + g.config.payout + '.');
     }
   }
   g.phase = 'acting';
@@ -318,7 +477,9 @@ function advance(g) {
       p.activeHand = idx;
       g.turn = p.id;
       g.turnAt = Date.now();
+      g.turnToken++;
       bump(g);
+      if (p.isBot) scheduleBot(g);
       return;
     }
   }
@@ -342,7 +503,8 @@ function dealerPhase(g) {
   const step = () => {
     if (g.phase !== 'dealer' || !rooms.has(g.code)) return;
     const hv = handValue(g.dealer);
-    if (hv.total < 17 || (hv.total === 17 && hv.soft)) {
+    const mustHit = hv.total < 17 || (hv.total === 17 && hv.soft && g.config.h17);
+    if (mustHit) {
       g.dealer.push(draw(g));
       bump(g);
       setTimeout(step, DEALER_MS);
@@ -383,6 +545,14 @@ function settle(g, anyLive) {
   } else {
     log(g, 'Table busts — dealer takes it.');
   }
+  finishSettle(g);
+}
+
+// cash out anyone who asked to leave mid-hand, now that it's over
+function finishSettle(g) {
+  const leaving = g.players.filter(p => p.leaveAfter);
+  for (const p of leaving) colorUp(g, p, 'cashes out.');
+  bump(g);
 }
 
 function nextHand(g, p) {
@@ -397,7 +567,8 @@ function nextHand(g, p) {
     q.insured = false;
     if (q.bet > q.bankroll) q.bet = 0;
   }
-  log(g, p.name + ' calls for the next hand. Place your bets.');
+  placeBotBets(g);
+  log(g, (p ? p.name + ' calls for the next hand. ' : '') + 'Place your bets.');
 }
 
 // ---------- player actions ----------
@@ -435,6 +606,7 @@ function act(g, p, action) {
 
   if (action === 'D') {
     if (h.cards.length !== 2 || h.splitAces) return 'Double only on your first two cards.';
+    if (h.fromSplit && !g.config.das) return 'No double after split at this table.';
     if (p.bankroll < h.bet) return 'Not enough chips to double.';
     p.bankroll -= h.bet;
     h.bet *= 2;
@@ -461,9 +633,10 @@ function act(g, p, action) {
     const c2 = h.cards.pop();
     const aces = h.cards[0].r === 'A';
     h.splitAces = aces;
+    h.fromSplit = true;
     p.hands.splice(p.activeHand + 1, 0, {
       cards: [c2], bet: h.bet, done: false, busted: false,
-      settled: false, result: null, resultCls: '', splitAces: aces
+      settled: false, result: null, resultCls: '', splitAces: aces, fromSplit: true
     });
     h.cards.push(draw(g));
     log(g, p.name + ' splits ' + (aces ? 'aces.' : 'the pair.'));
@@ -473,15 +646,26 @@ function act(g, p, action) {
     return null;
   }
 
+  if (action === 'R') {
+    if (!g.config.surrender) return 'Surrender is not offered here.';
+    if (h.cards.length !== 2 || h.fromSplit || p.hands.length > 1) return 'Surrender only as your first decision.';
+    p.bankroll += h.bet / 2;   // forfeit half
+    h.result = 'Surrender'; h.resultCls = 'push';
+    h.done = true; h.settled = true;
+    log(g, p.name + ' surrenders — half back.');
+    advance(g);
+    return null;
+  }
+
   return 'Unknown action.';
 }
 
-// ---------- watchdogs & presence (driven by a 2s heartbeat) ----------
+// ---------- watchdogs & presence (2s heartbeat) ----------
 function watchdogs(g) {
   const now = Date.now();
   if (g.phase === 'acting' && g.turn && now - g.turnAt > TURN_TIMEOUT_MS) {
     const p = playerById(g, g.turn);
-    if (p) {
+    if (p && !p.isBot) {
       log(g, p.name + ' is thinking too long — dealer waves it off (auto-stand).');
       p.hands[p.activeHand].done = true;
       advance(g);
@@ -497,10 +681,9 @@ function watchdogs(g) {
 function presenceSweep(g) {
   const absent = g.players.filter(p => !isPresent(g, p));
   if (!absent.length) return;
-
   for (const p of absent) {
     if (p.inRound && (g.phase === 'acting' || g.phase === 'insurance' || g.phase === 'dealer')) {
-      // finish their obligations, remove them when the hand ends
+      p.leaveAfter = true;   // banked when the hand settles
       if (g.phase === 'insurance' && p.insurance === null) {
         p.insurance = 'no';
         log(g, p.name + ' lost connection — no insurance.');
@@ -521,11 +704,11 @@ setInterval(() => {
   for (const [code, g] of rooms) {
     watchdogs(g);
     presenceSweep(g);
-    const anyoneHere = g.players.some(p => isPresent(g, p));
-    if (!anyoneHere && Date.now() - g.lastActivity > ROOM_IDLE_MS) rooms.delete(code);
+    ensureHost(g);
+    const anyHuman = humans(g).some(p => isPresent(g, p));
+    if (!anyHuman && Date.now() - g.lastActivity > ROOM_IDLE_MS) rooms.delete(code);
   }
   if (rooms.size > MAX_ROOMS) {
-    // oldest inactive rooms go first
     const byAge = [...rooms.entries()].sort((a, b) => a[1].lastActivity - b[1].lastActivity);
     while (rooms.size > MAX_ROOMS && byAge.length) rooms.delete(byAge.shift()[0]);
   }
@@ -543,6 +726,9 @@ function snapshot(g, youId) {
     phase: g.phase,
     round: g.round,
     shoe: g.shoe.length,
+    host: g.hostId,
+    config: g.config,
+    rules: rulesLine(g.config),
     dealer: {
       cards: dealerCards,
       showing: g.dealer.length ? dealerUpValue(g) : null,
@@ -555,10 +741,12 @@ function snapshot(g, youId) {
       .sort((a, b) => a.seat - b.seat)
       .map(p => ({
         id: p.id, name: p.name, seat: p.seat,
+        isBot: p.isBot, botStyle: p.botStyle,
         bankroll: p.bankroll, bet: p.bet, inRound: p.inRound,
         insurance: p.insurance,
         activeHand: p.activeHand,
         connected: isPresent(g, p),
+        leaving: p.leaveAfter,
         hands: p.hands.map(h => ({
           cards: h.cards, bet: h.bet, done: h.done,
           result: h.result, resultCls: h.resultCls
@@ -567,11 +755,27 @@ function snapshot(g, youId) {
     you: you ? youId : null,
     log: g.log.slice(-12)
   };
-  if (you) {
+  if (you && !you.isBot) {
     const acc = accounts.get(you.token);
     if (acc) snap.cage = { cash: acc.cash };
   }
   return snap;
+}
+
+function lobbyList() {
+  return [...rooms.values()]
+    .filter(g => g.config.public)
+    .map(g => ({
+      code: g.code,
+      host: (playerById(g, g.hostId) || {}).name || '—',
+      humans: humans(g).length,
+      bots: g.players.filter(p => p.isBot).length,
+      seats: g.players.length,
+      phase: g.phase,
+      payout: g.config.payout,
+      rules: rulesLine(g.config)
+    }))
+    .sort((a, b) => b.humans - a.humans);
 }
 
 // ---------- websocket plumbing (hand-rolled RFC 6455, text frames) ----------
@@ -644,29 +848,21 @@ function handleWsData(conn, data) {
     if (mask) for (let i = 0; i < payload.length; i++) payload[i] ^= mask[i % 4];
     conn.buffer = buf.subarray(off + len);
 
-    if (opcode === 0x8) { // close
+    if (opcode === 0x8) {
       try { conn.socket.write(wsFrame(0x8, Buffer.alloc(0))); } catch (e) {}
       killConn(conn);
       return;
     }
-    if (opcode === 0x9) { // ping -> pong
-      try { conn.socket.write(wsFrame(0xA, payload)); } catch (e) {}
-      continue;
-    }
-    if (opcode === 0xA) { // pong: proof of life
+    if (opcode === 0x9) { try { conn.socket.write(wsFrame(0xA, payload)); } catch (e) {} continue; }
+    if (opcode === 0xA) {
       conn.lastPong = Date.now();
       const g = rooms.get(conn.room);
-      if (g) {
-        const p = playerById(g, conn.playerId);
-        if (p) p.lastSeen = Date.now();
-      }
+      if (g) { const p = playerById(g, conn.playerId); if (p) p.lastSeen = Date.now(); }
       continue;
     }
-    // text messages from clients are just keepalive/no-op for now
   }
 }
 
-// server ping every 25s keeps proxies (Railway) from idling the socket out
 setInterval(() => {
   for (const g of rooms.values()) {
     for (const conn of g.conns) {
@@ -703,9 +899,7 @@ function lanUrls() {
   const ifaces = os.networkInterfaces();
   for (const name of Object.keys(ifaces)) {
     for (const inf of ifaces[name] || []) {
-      if (inf.family === 'IPv4' && !inf.internal) {
-        urls.push('http://' + inf.address + ':' + PORT);
-      }
+      if (inf.family === 'IPv4' && !inf.internal) urls.push('http://' + inf.address + ':' + PORT);
     }
   }
   return urls;
@@ -714,6 +908,10 @@ function lanUrls() {
 function normalizeRoom(code) {
   code = String(code || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   return (code.length >= 3 && code.length <= 8) ? code : '';
+}
+
+function cleanName(s) {
+  return String(s || '').replace(/[^A-Za-z0-9 _.'-]/g, '').trim().slice(0, 14);
 }
 
 const STATIC_FILES = {
@@ -742,6 +940,10 @@ const server = http.createServer(async (req, res) => {
       sendJSON(res, 200, snapshot(g, youId));
       return;
     }
+    if (p === '/api/lobby' && req.method === 'GET') {
+      sendJSON(res, 200, { tables: lobbyList() });
+      return;
+    }
     if (p === '/api/info' && req.method === 'GET') {
       sendJSON(res, 200, { name: 'TABLE SEVEN', port: PORT, urls: lanUrls() });
       return;
@@ -749,33 +951,42 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && p.startsWith('/api/')) {
       const body = await readBody(req);
 
-      if (p === '/api/admin/overview' || p === '/api/admin/credit') {
+      if (p === '/api/admin/overview' || p === '/api/admin/credit' || p === '/api/admin/delete') {
         if (!isAdmin(body.key)) {
-          await new Promise(r => setTimeout(r, 300)); // slow down guessing
+          await new Promise(r => setTimeout(r, 300));
           sendJSON(res, 403, { error: 'Wrong pit boss key.' });
           return;
         }
         if (p === '/api/admin/overview') {
           const seatedAt = {};
           for (const g of rooms.values())
-            for (const q of g.players) seatedAt[q.token] = g.code;
+            for (const q of g.players) if (q.token) seatedAt[q.token] = g.code;
           const accs = [...accounts.entries()].map(([token, acc]) => ({
-            token,
-            name: acc.name || '(unnamed)',
-            cash: acc.cash,
-            comps: acc.comps || 0,
-            seated: seatedAt[token] || null
+            token, name: acc.name || '(unnamed)', cash: acc.cash,
+            comps: acc.comps || 0, seated: seatedAt[token] || null
           })).sort((x, y) => y.cash - x.cash);
           const tables = [...rooms.values()].map(g => ({
             code: g.code, phase: g.phase, round: g.round,
+            public: g.config.public, payout: g.config.payout,
             players: g.players.map(q => ({
-              name: q.name, chips: q.bankroll, connected: isPresent(g, q)
+              name: q.name + (q.isBot ? ' 🤖' : ''), chips: q.bankroll, connected: isPresent(g, q)
             }))
           }));
           sendJSON(res, 200, { accounts: accs, tables });
           return;
         }
-        // credit / dock a cage account
+        if (p === '/api/admin/delete') {
+          const token = String(body.token || '');
+          if (!accounts.has(token)) { sendJSON(res, 400, { error: 'No such account.' }); return; }
+          for (const g of rooms.values()) {
+            const q = g.players.find(pp => pp.token === token);
+            if (q) { g.players = g.players.filter(pp => pp.id !== q.id); ensureHost(g); bump(g); }
+          }
+          accounts.delete(token);
+          saveCageSoon();
+          sendJSON(res, 200, { ok: true });
+          return;
+        }
         const acc = accounts.get(String(body.token || ''));
         if (!acc) { sendJSON(res, 400, { error: 'No such account.' }); return; }
         const amount = Math.round(Number(body.amount) || 0);
@@ -787,11 +998,9 @@ const server = http.createServer(async (req, res) => {
         saveCageSoon();
         for (const g of rooms.values()) {
           const q = g.players.find(pp => pp.token === body.token);
-          if (q) {
-            log(g, amount > 0
-              ? 'The pit boss credits ' + q.name + '’s cage account ' + fmt(amount) + '.'
-              : 'The pit boss docks ' + q.name + '’s cage account ' + fmt(-amount) + '.');
-          }
+          if (q) log(g, amount > 0
+            ? 'The pit boss credits ' + q.name + '’s cage account ' + fmt(amount) + '.'
+            : 'The pit boss docks ' + q.name + '’s cage account ' + fmt(-amount) + '.');
         }
         sendJSON(res, 200, { ok: true, cash: acc.cash });
         return;
@@ -799,13 +1008,13 @@ const server = http.createServer(async (req, res) => {
 
       if (p === '/api/account') {
         const { token, acc, created, comped } = getAccount(body.token);
-        if (body.name) acc.name = String(body.name).replace(/[^A-Za-z0-9 _.'-]/g, '').trim().slice(0, 14);
+        if (body.name) acc.name = cleanName(body.name);
         sendJSON(res, 200, { token, cash: acc.cash, name: acc.name, created, comped });
         return;
       }
 
       if (p === '/api/join') {
-        const name = String(body.name || '').replace(/[^A-Za-z0-9 _.'-]/g, '').trim().slice(0, 14);
+        const name = cleanName(body.name);
         if (!name) { sendJSON(res, 400, { error: 'Need a name (letters and numbers).' }); return; }
         const { token, acc } = getAccount(body.token);
         const buyIn = Math.floor(Number(body.buyIn) || 0);
@@ -813,23 +1022,28 @@ const server = http.createServer(async (req, res) => {
         if (buyIn > acc.cash) { sendJSON(res, 400, { error: 'The cage says you only have ' + fmt(acc.cash) + '.' }); return; }
         let code = normalizeRoom(body.room);
         let g = code ? rooms.get(code) : null;
+        const creating = !g;
         if (!g) {
-          if (rooms.size >= MAX_ROOMS) { sendJSON(res, 503, { error: 'Too many tables open right now — try again in a bit.' }); return; }
+          if (rooms.size >= MAX_ROOMS) { sendJSON(res, 503, { error: 'Too many tables open — try again soon.' }); return; }
           if (!code) code = newCode();
-          g = freshGame(code);
+          g = freshGame(code, body.config);
           rooms.set(code, g);
         }
-        if (g.players.length >= 4) { sendJSON(res, 400, { error: 'That table is full (4 seats).' }); return; }
+        if (g.players.length >= MAX_SEATS) { sendJSON(res, 400, { error: 'That table is full.' }); return; }
+        // one seat per account at a table
+        if (g.players.some(q => q.token === token)) { sendJSON(res, 400, { error: 'You are already seated here.' }); return; }
         acc.name = name;
         acc.cash -= buyIn;
         saveCageSoon();
-        const taken = g.players.map(q => q.seat);
-        let seat = 1;
-        while (taken.includes(seat)) seat++;
-        const np = freshPlayer(name, seat, token, buyIn);
+        const np = freshPlayer(name, freeSeat(g), token, buyIn);
         g.players.push(np);
-        log(g, name + ' buys in for ' + fmt(buyIn) + ' — seat ' + seat + '.');
-        sendJSON(res, 200, { playerId: np.id, seat, room: code, token, cash: acc.cash });
+        ensureHost(g);
+        log(g, name + ' buys in for ' + fmt(buyIn) + ' — seat ' + np.seat + '.');
+        if (g.phase === 'betting') { /* bots already have bets */ }
+        sendJSON(res, 200, {
+          playerId: np.id, seat: np.seat, room: code, token, cash: acc.cash,
+          host: g.hostId === np.id, created: creating
+        });
         return;
       }
 
@@ -838,6 +1052,7 @@ const server = http.createServer(async (req, res) => {
       const player = body.playerId ? playerById(g, body.playerId) : null;
       if (!player) { sendJSON(res, 400, { error: 'Unknown player — join first.' }); return; }
       player.lastSeen = Date.now();
+      const isHost = g.hostId === player.id;
 
       if (p === '/api/bet') {
         if (g.phase !== 'betting') { sendJSON(res, 409, { error: 'Betting is closed.' }); return; }
@@ -851,7 +1066,6 @@ const server = http.createServer(async (req, res) => {
       }
       if (p === '/api/deal') {
         if (g.phase !== 'betting') { sendJSON(res, 409, { error: 'A round is already going.' }); return; }
-        if (player.bet < 5) { sendJSON(res, 400, { error: 'Put a bet in your circle first.' }); return; }
         const err = startRound(g, player);
         if (err) { sendJSON(res, 400, { error: err }); return; }
         sendJSON(res, 200, { ok: true });
@@ -883,6 +1097,7 @@ const server = http.createServer(async (req, res) => {
       if (p === '/api/next') {
         if (g.phase !== 'settle') { sendJSON(res, 409, { error: 'The hand is still going.' }); return; }
         nextHand(g, player);
+        bump(g);
         sendJSON(res, 200, { ok: true });
         return;
       }
@@ -890,7 +1105,7 @@ const server = http.createServer(async (req, res) => {
         if (g.phase !== 'betting') { sendJSON(res, 409, { error: 'Wait for the betting phase.' }); return; }
         const { acc } = getAccount(player.token);
         const amount = Math.min(300, acc.cash);
-        if (amount < 5) { sendJSON(res, 400, { error: 'The cage says your account is empty. It will stake you when you rejoin.' }); return; }
+        if (amount < 5) { sendJSON(res, 400, { error: 'The cage says your account is empty. It restakes you when you rejoin.' }); return; }
         acc.cash -= amount;
         saveCageSoon();
         player.bankroll += amount;
@@ -900,8 +1115,21 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       if (p === '/api/leave') {
-        if (g.phase !== 'betting' && g.phase !== 'settle' && player.inRound) {
-          sendJSON(res, 409, { error: 'Finish the hand first.' }); return;
+        const { acc } = getAccount(player.token);
+        if (player.inRound && (g.phase === 'acting' || g.phase === 'insurance' || g.phase === 'dealer')) {
+          player.leaveAfter = true;
+          if (g.phase === 'insurance' && player.insurance === null) {
+            player.insurance = 'no';
+            if (allInsuranceAnswered(g)) resolvePeek(g);
+          }
+          if (g.phase === 'acting' && g.turn === player.id) {
+            player.hands[player.activeHand].done = true;
+            advance(g);
+          }
+          for (const conn of g.conns) if (conn.playerId === player.id) killConn(conn);
+          bump(g);
+          sendJSON(res, 200, { ok: true, pending: true, cash: acc.cash });
+          return;
         }
         const cash = colorUp(g, player, 'heads to the cage.');
         for (const conn of g.conns) if (conn.playerId === player.id) killConn(conn);
@@ -909,11 +1137,40 @@ const server = http.createServer(async (req, res) => {
         sendJSON(res, 200, { ok: true, cash });
         return;
       }
+
+      // ----- host controls -----
+      if (p === '/api/room/config') {
+        if (!isHost) { sendJSON(res, 403, { error: 'Only the host can change the rules.' }); return; }
+        if (g.phase !== 'betting') { sendJSON(res, 409, { error: 'Change rules between hands.' }); return; }
+        const prevDecks = g.config.decks;
+        g.config = sanitizeConfig(Object.assign({}, g.config, body.config));
+        if (g.config.decks !== prevDecks) g.shoe = buildShoe(g.config.decks);
+        log(g, player.name + ' sets the house rules: ' + rulesLine(g.config) + '.');
+        bump(g);
+        sendJSON(res, 200, { ok: true });
+        return;
+      }
+      if (p === '/api/room/addbot') {
+        if (!isHost) { sendJSON(res, 403, { error: 'Only the host can add bots.' }); return; }
+        const err = addBot(g, body.style);
+        if (err) { sendJSON(res, 400, { error: err }); return; }
+        bump(g);
+        sendJSON(res, 200, { ok: true });
+        return;
+      }
+      if (p === '/api/room/removebot') {
+        if (!isHost) { sendJSON(res, 403, { error: 'Only the host can remove bots.' }); return; }
+        const err = removeBot(g, body.botId);
+        if (err) { sendJSON(res, 400, { error: err }); return; }
+        bump(g);
+        sendJSON(res, 200, { ok: true });
+        return;
+      }
+
       sendJSON(res, 404, { error: 'No such endpoint.' });
       return;
     }
 
-    // ----- static files (allowlist only) -----
     const file = STATIC_FILES[p];
     if (!file) { res.writeHead(404, { 'Content-Type': 'text/plain' }); res.end('Not found'); return; }
     fs.readFile(path.join(ROOT, file), (err, data) => {
@@ -945,18 +1202,14 @@ server.on('upgrade', (req, socket) => {
   const code = normalizeRoom(url.searchParams.get('t'));
   const playerId = url.searchParams.get('playerId') || '';
   const g = code ? rooms.get(code) : null;
-  const conn = {
-    socket, room: code, playerId,
-    buffer: Buffer.alloc(0), dead: false, lastPong: Date.now()
-  };
+  const conn = { socket, room: code, playerId, buffer: Buffer.alloc(0), dead: false, lastPong: Date.now() };
   if (!g || !playerById(g, playerId)) {
     try { socket.write(wsFrame(0x1, Buffer.from(JSON.stringify({ noRoom: true, version: 0 })))); } catch (e) {}
     setTimeout(() => { try { socket.destroy(); } catch (e) {} }, 100);
     return;
   }
   g.conns.add(conn);
-  const player = playerById(g, playerId);
-  player.lastSeen = Date.now();
+  playerById(g, playerId).lastSeen = Date.now();
   socket.on('data', d => handleWsData(conn, d));
   socket.on('close', () => killConn(conn));
   socket.on('error', () => killConn(conn));
@@ -968,20 +1221,17 @@ loadCage();
 server.listen(PORT, () => {
   console.log('');
   console.log('  ♠ ♥  T A B L E   S E V E N  ♦ ♣');
-  console.log('  The casino is open on port ' + PORT + '  (live websockets + cage accounts)');
+  console.log('  The casino is open on port ' + PORT + '  (live websockets + cage + bots)');
   console.log('');
   console.log('  Play here:            http://localhost:' + PORT);
-  for (const u of lanUrls()) {
-    console.log('  Same-WiFi players:    ' + u);
-  }
+  for (const u of lanUrls()) console.log('  Same-WiFi players:    ' + u);
   console.log('');
   console.log('  Every visitor gets a $' + START_CASH + ' cage account (saved in cage-data.json).');
-  console.log('  Each table gets a private code — share the link the page shows you.');
+  console.log('  First to sit hosts the table: add bots + set the rules.');
   console.log('');
   console.log('  Pit Boss console:     http://localhost:' + PORT + '/admin');
   console.log('  Pit Boss key:         ' + ADMIN_KEY +
     (process.env.TABLE_ADMIN_KEY ? '  (from TABLE_ADMIN_KEY)' : '  (random this boot — set TABLE_ADMIN_KEY to fix it)'));
-  console.log('  Also served: /vegas-playbook.html and /blackjack-trainer.html');
   console.log('  Press Ctrl+C to close the casino.');
   console.log('');
 });
