@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>TABLE SEVEN — Live Blackjack Casino</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='18' fill='%230c1f16'/%3E%3Ctext x='50' y='68' font-size='58' text-anchor='middle' fill='%23d4af37'%3E%E2%99%A0%3C/text%3E%3C/svg%3E">
 <style>
   :root {
     --felt: #0a1b13; --felt2: #0c2118; --card: #132b1f; --card2: #0f2419;
@@ -187,6 +188,7 @@
   #createForm { display: none; margin-top: 8px; }
   .cfgGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   #joinErr { color: #e07a5f; font-size: 0.82rem; min-height: 16px; margin-top: 10px; text-align: center; }
+  .lobbyCard a { color: var(--gold-dim); }
   .linkbtn { background: none; border: none; color: var(--gold-dim); font-family: Georgia, serif; font-size: 0.82rem;
     cursor: pointer; text-decoration: underline; padding: 4px; }
   .away { color: #e07a5f !important; }
@@ -194,6 +196,27 @@
   #chipRack .chipstack { vertical-align: bottom; margin: 0 2px; }
   .rackcnt { font-family: Verdana, sans-serif; font-size: 0.68rem; color: var(--cream); margin-right: 8px; }
   @media (max-width: 640px) { .shoegfx, .discard, .placard { display: none; } .feltart { width: 96%; } }
+
+  /* Desktop: split the felt from the side info instead of stacking everything
+     in one long scrolling column. #railLeft/#railCenter/#railRight each wrap
+     an already-contiguous group of the same elements in the same order as
+     the mobile layout below — nothing is reordered and no ids move, so JS
+     (getElementById everywhere) and the mobile flow are both untouched. */
+  @media (min-width: 1000px) {
+    main {
+      max-width: 1360px;
+      display: grid;
+      grid-template-columns: 250px minmax(0, 1fr) 290px;
+      column-gap: 22px;
+      align-items: start;
+    }
+    #railLeft { grid-column: 1; }
+    #railCenter { grid-column: 2; }
+    #railRight { grid-column: 3; }
+    #railLeft .statbar { flex-direction: column; align-items: stretch; }
+    #railLeft .stat { min-width: 0; }
+    #railRight #feed { max-height: calc(100vh - 260px); }
+  }
 </style>
 </head>
 <body>
@@ -266,10 +289,14 @@
     </div>
 
     <div id="joinErr"></div>
+    <p style="text-align:center; font-size:0.68rem; color:var(--muted); margin-top:14px">
+      Free play &middot; fake money &middot; <a href="/privacy.html">Privacy</a> &middot; <a href="/terms.html">Terms</a>
+    </p>
   </div>
 </div>
 
 <main>
+<div id="railLeft">
   <div class="statbar">
     <div class="stat"><div class="lab">Your Chips</div><div class="val" id="stBank">&mdash;</div></div>
     <div class="stat"><div class="lab">Cage Cash</div><div class="val" id="stCage">&mdash;</div></div>
@@ -298,7 +325,9 @@
       <button class="primary" id="btnApplyRules">Apply</button>
     </div>
   </div>
+</div>
 
+<div id="railCenter">
   <div class="rail">
   <div class="tablefelt" id="felt">
     <div id="signalFlash"></div>
@@ -359,7 +388,9 @@
     <button id="btnNext" class="primary">Next Hand (N)</button>
     <button id="btnLeave2" class="ghost">&#127974; Cash Out</button>
   </div>
+</div>
 
+<div id="railRight">
   <div id="coach"><span class="neutral">Coach watches your seat only &mdash; your tablemates are on their own.</span></div>
 
   <div class="togglerow">
@@ -371,6 +402,7 @@
   </div>
 
   <div id="feed"></div>
+</div>
 </main>
 
 <footer>TABLE SEVEN &middot; friendly stakes, fake money, real bragging rights</footer>

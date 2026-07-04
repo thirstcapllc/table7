@@ -20,6 +20,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
+const store = require('./store');
 
 const PORT = process.env.PORT || 7777;
 const FAST = !!process.env.TABLE_FAST;          // used by automated tests
@@ -31,6 +32,13 @@ const PRESENCE_MS = Number(process.env.TABLE_PRESENCE_MS) || (FAST ? 3600000 : 1
 const ROOM_IDLE_MS = FAST ? 3600000 : 20 * 60000;
 const MAX_ROOMS = 50;
 const MAX_SEATS = 6;
+// rate limiting: relaxed to near-unlimited under FAST (automated tests) so
+// gameplay volume never trips it; a dedicated test overrides these via env
+// to prove the 429 path actually works.
+const RATE_WINDOW_MS = 60000;
+const RATE_LOGIN_MAX = Number(process.env.TABLE_RATE_LOGIN_MAX) || (FAST ? 1e9 : 10);
+const RATE_JOIN_MAX = Number(process.env.TABLE_RATE_JOIN_MAX) || (FAST ? 1e9 : 20);
+const RATE_GAMEPLAY_MAX = Number(process.env.TABLE_RATE_GAMEPLAY_MAX) || (FAST ? 1e9 : 120);
 const START_CASH = 1000;   // the cage stakes every new player
 const COMP_CASH = 500;     // pity stake when you go broke
 const ROOT = __dirname;
@@ -112,10 +120,9 @@ function basicStrategy(cards, up, canDouble, canSplit) {
 }
 
 // ---------- the cage (persistent accounts) ----------
-const CAGE_FILE = process.env.TABLE_CAGE_FILE || path.join(ROOT, 'cage-data.json');
 const accounts = new Map(); // token(secret) -> { name, cash, comps, no, pin }
 const byNumber = new Map(); // player number -> token  (for logging back in)
-let cageSaveTimer = null;
+let STORE = null; // set by initStore() — Postgres in prod, JSON file locally
 
 function newPlayerNo() {
   for (;;) {
@@ -130,30 +137,40 @@ function pinEqual(a, b) {
   return crypto.timingSafeEqual(ba, bb);
 }
 
-function loadCage() {
-  try {
-    const data = JSON.parse(fs.readFileSync(CAGE_FILE, 'utf8'));
-    for (const [token, acc] of Object.entries(data)) accounts.set(token, acc);
-    console.log('  Cage ledger loaded: ' + accounts.size + ' account(s).');
-  } catch (e) { /* first run — empty cage */ }
-  // index by player number, and back-fill numbers/PINs for older accounts
-  let changed = false;
+// Persistent storage: Postgres in production (DATABASE_URL set — see
+// store.js), a local JSON file otherwise. The in-memory `accounts` Map is a
+// read cache in front of whichever backend; account mutations write through.
+async function initStore() {
+  STORE = store.create();
+  const loaded = await STORE.init();
+  for (const [token, acc] of loaded) accounts.set(token, acc);
   for (const [token, acc] of accounts) if (acc.no) byNumber.set(acc.no, token);
+  // back-fill player numbers/PINs for accounts created before this feature existed
+  const toPersist = [];
   for (const [token, acc] of accounts) {
+    let changed = false;
     if (!acc.no) { acc.no = newPlayerNo(); byNumber.set(acc.no, token); changed = true; }
     if (!acc.pin) { acc.pin = newPin(); changed = true; }
+    if (changed) toPersist.push(token);
   }
-  if (changed) saveCageSoon();
+  for (const token of toPersist) await persistAccount(token);
 }
 
-function saveCageSoon() {
-  if (cageSaveTimer) return;
-  cageSaveTimer = setTimeout(() => {
-    cageSaveTimer = null;
-    const data = {};
-    for (const [token, acc] of accounts) data[token] = acc;
-    fs.writeFile(CAGE_FILE, JSON.stringify(data, null, 1), () => {});
-  }, 800);
+// Fire-and-forget writers: they never throw, so callers may await them (for
+// stronger durability before responding) or call them bare (background write).
+async function persistAccount(token) {
+  const acc = accounts.get(token);
+  if (!acc) return;
+  try { await STORE.upsertAccount(token, acc); }
+  catch (e) { console.error('[store] upsertAccount failed:', e.message || e); }
+}
+async function recordTx(entry) {
+  try { await STORE.logTransaction(entry); }
+  catch (e) { console.error('[store] logTransaction failed:', e.message || e); }
+}
+async function recordHand(entry) {
+  try { await STORE.logHand(entry); }
+  catch (e) { console.error('[store] logHand failed:', e.message || e); }
 }
 
 function getAccount(token) {
@@ -171,7 +188,10 @@ function getAccount(token) {
     acc.comps++;
     comped = true;
   }
-  saveCageSoon();
+  if (created || comped) {
+    persistAccount(token);
+    if (comped) recordTx({ token, type: 'comp', amount: COMP_CASH, balanceAfter: acc.cash, note: 'broke — cage comp' });
+  }
   return { token, acc, created, comped };
 }
 
@@ -296,14 +316,18 @@ function freeSeat(g) {
   return seat;
 }
 
-// color up: table chips go back to the player's cage account (humans only)
-function colorUp(g, p, reason) {
+// color up: table chips go back to the player's cage account (humans only).
+// Async (Postgres write) — await it where the response should reflect the
+// confirmed balance; fire-and-forget is fine from background contexts
+// (presence sweeps, mid-hand cash-outs) since errors are swallowed internally.
+async function colorUp(g, p, reason) {
   let cash = null;
   if (!p.isBot) {
-    const { acc } = getAccount(p.token);
+    const { token, acc } = getAccount(p.token);
     acc.cash += p.bankroll;
-    saveCageSoon();
     cash = acc.cash;
+    await persistAccount(token);
+    await recordTx({ token, type: 'cashout', amount: p.bankroll, balanceAfter: acc.cash, tableCode: g.code, note: reason || null });
   }
   const chips = p.bankroll;
   g.players = g.players.filter(q => q.id !== p.id);
@@ -571,8 +595,25 @@ function settle(g, anyLive) {
   finishSettle(g);
 }
 
-// cash out anyone who asked to leave mid-hand, now that it's over
+// how much a settled hand actually paid, for the history log
+function handPayout(h) {
+  const m = /\+\$([0-9.]+)/.exec(h.result || '');
+  if (m) return Number(m[1]);
+  if (h.result === 'Surrender') return -(h.bet / 2);
+  if (h.resultCls === 'lose') return -h.bet;
+  return 0; // push
+}
+
+// runs once per round, right after every hand is settled: logs game history
+// for humans and cashes out anyone who asked to leave mid-hand
 function finishSettle(g) {
+  for (const p of bettors(g)) {
+    if (p.isBot) continue;
+    for (const h of p.hands) {
+      if (!h.settled) continue;
+      recordHand({ token: p.token, tableCode: g.code, round: g.round, bet: h.bet, result: h.result, payout: handPayout(h) });
+    }
+  }
   const leaving = g.players.filter(p => p.leaveAfter);
   for (const p of leaving) colorUp(g, p, 'cashes out.');
   bump(g);
@@ -896,9 +937,40 @@ setInterval(() => {
   }
 }, 25000).unref();
 
+// ---------- rate limiting (per-IP token buckets, no dependency) ----------
+// GET /api/state is exempt (cheap read; the websocket carries live play, this
+// is just the polling fallback). Every POST /api/* is bucketed by tier.
+const rateBuckets = new Map(); // "tier:ip" -> { count, resetAt }
+function rateRule(pathname) {
+  if (pathname === '/api/login' || pathname.startsWith('/api/admin/'))
+    return { tier: 'strict', max: RATE_LOGIN_MAX };
+  if (pathname === '/api/join' || pathname === '/api/account')
+    return { tier: 'moderate', max: RATE_JOIN_MAX };
+  return { tier: 'gameplay', max: RATE_GAMEPLAY_MAX };
+}
+function clientIp(req) {
+  const xf = req.headers['x-forwarded-for'];
+  if (xf) return String(xf).split(',')[0].trim();
+  return (req.socket && req.socket.remoteAddress) || 'unknown';
+}
+// returns seconds-until-reset if the caller should be rejected, else null
+function checkRateLimit(req, pathname) {
+  const rule = rateRule(pathname);
+  const key = rule.tier + ':' + clientIp(req);
+  const now = Date.now();
+  let b = rateBuckets.get(key);
+  if (!b || now > b.resetAt) { b = { count: 0, resetAt: now + RATE_WINDOW_MS }; rateBuckets.set(key, b); }
+  b.count++;
+  return b.count > rule.max ? Math.max(1, Math.ceil((b.resetAt - now) / 1000)) : null;
+}
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, b] of rateBuckets) if (now > b.resetAt) rateBuckets.delete(k);
+}, 60000).unref();
+
 // ---------- http plumbing ----------
 function sendJSON(res, code, obj) {
-  res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+  res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
   res.end(JSON.stringify(obj));
 }
 
@@ -946,7 +1018,11 @@ const STATIC_FILES = {
   '/vegas-playbook.html': 'vegas-playbook.html',
   '/blackjack-trainer.html': 'blackjack-trainer.html',
   '/admin': 'admin.html',
-  '/admin.html': 'admin.html'
+  '/admin.html': 'admin.html',
+  '/privacy.html': 'privacy.html',
+  '/terms.html': 'terms.html',
+  '/donate': 'donate.html',
+  '/donate.html': 'donate.html'
 };
 
 const server = http.createServer(async (req, res) => {
@@ -975,9 +1051,15 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     if (req.method === 'POST' && p.startsWith('/api/')) {
+      const retryAfter = checkRateLimit(req, p);
+      if (retryAfter !== null) {
+        res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': String(retryAfter), 'X-Content-Type-Options': 'nosniff' });
+        res.end(JSON.stringify({ error: 'Too many requests — slow down and try again in a bit.' }));
+        return;
+      }
       const body = await readBody(req);
 
-      if (p === '/api/admin/overview' || p === '/api/admin/credit' || p === '/api/admin/delete' || p === '/api/admin/resetpin') {
+      if (p === '/api/admin/overview' || p === '/api/admin/credit' || p === '/api/admin/delete' || p === '/api/admin/resetpin' || p === '/api/admin/history') {
         if (!isAdmin(body.key)) {
           await new Promise(r => setTimeout(r, 300));
           sendJSON(res, 403, { error: 'Wrong pit boss key.' });
@@ -1009,21 +1091,31 @@ const server = http.createServer(async (req, res) => {
             const q = g.players.find(pp => pp.token === token);
             if (q) { g.players = g.players.filter(pp => pp.id !== q.id); ensureHost(g); bump(g); }
           }
+          await recordTx({ token, type: 'account_deleted', amount: 0, balanceAfter: acc0.cash, note: 'deleted by pit boss' });
           if (acc0.no) byNumber.delete(acc0.no);
           accounts.delete(token);
-          saveCageSoon();
+          try { await STORE.deleteAccount(token); } catch (e) { console.error('[store] deleteAccount failed:', e.message || e); }
           sendJSON(res, 200, { ok: true });
           return;
         }
         if (p === '/api/admin/resetpin') {
-          const acc = accounts.get(String(body.token || ''));
+          const token = String(body.token || '');
+          const acc = accounts.get(token);
           if (!acc) { sendJSON(res, 400, { error: 'No such account.' }); return; }
           acc.pin = newPin();
-          saveCageSoon();
+          await persistAccount(token);
           sendJSON(res, 200, { ok: true, no: acc.no, pin: acc.pin });
           return;
         }
-        const acc = accounts.get(String(body.token || ''));
+        if (p === '/api/admin/history') {
+          const token = String(body.token || '');
+          if (!accounts.has(token)) { sendJSON(res, 400, { error: 'No such account.' }); return; }
+          const hist = await STORE.getHistory(token, 100);
+          sendJSON(res, 200, hist);
+          return;
+        }
+        const token = String(body.token || '');
+        const acc = accounts.get(token);
         if (!acc) { sendJSON(res, 400, { error: 'No such account.' }); return; }
         const amount = Math.round(Number(body.amount) || 0);
         if (!amount || Math.abs(amount) > 100000) {
@@ -1031,7 +1123,8 @@ const server = http.createServer(async (req, res) => {
           return;
         }
         acc.cash = Math.max(0, acc.cash + amount);
-        saveCageSoon();
+        await persistAccount(token);
+        await recordTx({ token, type: amount > 0 ? 'admin_credit' : 'admin_dock', amount, balanceAfter: acc.cash, note: 'pit boss adjustment' });
         for (const g of rooms.values()) {
           const q = g.players.find(pp => pp.token === body.token);
           if (q) log(g, amount > 0
@@ -1065,7 +1158,8 @@ const server = http.createServer(async (req, res) => {
           const guest = accounts.get(discard);
           const seated = [...rooms.values()].some(r => r.players.some(pp => pp.token === discard));
           if (guest.cash === START_CASH && !guest.name && !seated) {
-            accounts.delete(discard); byNumber.delete(guest.no); saveCageSoon();
+            accounts.delete(discard); byNumber.delete(guest.no);
+            try { await STORE.deleteAccount(discard); } catch (e) { console.error('[store] deleteAccount failed:', e.message || e); }
           }
         }
         sendJSON(res, 200, { token, cash: acc.cash, name: acc.name, no: acc.no, pin: acc.pin });
@@ -1093,7 +1187,8 @@ const server = http.createServer(async (req, res) => {
         if (g.players.some(q => q.token === token)) { sendJSON(res, 400, { error: 'You are already seated here.' }); return; }
         acc.name = name;
         acc.cash -= buyIn;
-        saveCageSoon();
+        await persistAccount(token);
+        await recordTx({ token, type: 'buyin', amount: -buyIn, balanceAfter: acc.cash, tableCode: code });
         const np = freshPlayer(name, freeSeat(g), token, buyIn);
         g.players.push(np);
         ensureHost(g);
@@ -1162,11 +1257,12 @@ const server = http.createServer(async (req, res) => {
       }
       if (p === '/api/rebuy') {
         if (g.phase !== 'betting') { sendJSON(res, 409, { error: 'Wait for the betting phase.' }); return; }
-        const { acc } = getAccount(player.token);
+        const { token, acc } = getAccount(player.token);
         const amount = Math.min(300, acc.cash);
         if (amount < 5) { sendJSON(res, 400, { error: 'The cage says your account is empty. It restakes you when you rejoin.' }); return; }
         acc.cash -= amount;
-        saveCageSoon();
+        await persistAccount(token);
+        await recordTx({ token, type: 'rebuy', amount: -amount, balanceAfter: acc.cash, tableCode: g.code });
         player.bankroll += amount;
         player.rebuys++;
         log(g, player.name + ' rebuys ' + fmt(amount) + ' from the cage.');
@@ -1190,7 +1286,7 @@ const server = http.createServer(async (req, res) => {
           sendJSON(res, 200, { ok: true, pending: true, cash: acc.cash });
           return;
         }
-        const cash = colorUp(g, player, 'heads to the cage.');
+        const cash = await colorUp(g, player, 'heads to the cage.');
         for (const conn of g.conns) if (conn.playerId === player.id) killConn(conn);
         bump(g);
         sendJSON(res, 200, { ok: true, cash });
@@ -1276,21 +1372,26 @@ server.on('upgrade', (req, socket) => {
   wsSend(conn, JSON.stringify(snapshot(g, playerId)));
 });
 
-loadCage();
-server.listen(PORT, () => {
-  console.log('');
-  console.log('  ♠ ♥  T A B L E   S E V E N  ♦ ♣');
-  console.log('  The casino is open on port ' + PORT + '  (live websockets + cage + bots)');
-  console.log('');
-  console.log('  Play here:            http://localhost:' + PORT);
-  for (const u of lanUrls()) console.log('  Same-WiFi players:    ' + u);
-  console.log('');
-  console.log('  Every visitor gets a $' + START_CASH + ' cage account (saved in cage-data.json).');
-  console.log('  First to sit hosts the table: add bots + set the rules.');
-  console.log('');
-  console.log('  Pit Boss console:     http://localhost:' + PORT + '/admin');
-  console.log('  Pit Boss key:         ' + ADMIN_KEY +
-    (process.env.TABLE_ADMIN_KEY ? '  (from TABLE_ADMIN_KEY)' : '  (random this boot — set TABLE_ADMIN_KEY to fix it)'));
-  console.log('  Press Ctrl+C to close the casino.');
-  console.log('');
+initStore().then(() => {
+  server.listen(PORT, () => {
+    console.log('');
+    console.log('  ♠ ♥  T A B L E   S E V E N  ♦ ♣');
+    console.log('  The casino is open on port ' + PORT + '  (live websockets + cage + bots)');
+    console.log('');
+    console.log('  Play here:            http://localhost:' + PORT);
+    for (const u of lanUrls()) console.log('  Same-WiFi players:    ' + u);
+    console.log('');
+    console.log('  Storage:              ' + (process.env.DATABASE_URL ? 'Postgres (persists across redeploys)' : 'local JSON file (cage-data.json — set DATABASE_URL in production)'));
+    console.log('  Every visitor gets a $' + START_CASH + ' cage account.');
+    console.log('  First to sit hosts the table: add bots + set the rules.');
+    console.log('');
+    console.log('  Pit Boss console:     http://localhost:' + PORT + '/admin');
+    console.log('  Pit Boss key:         ' + ADMIN_KEY +
+      (process.env.TABLE_ADMIN_KEY ? '  (from TABLE_ADMIN_KEY)' : '  (random this boot — set TABLE_ADMIN_KEY to fix it)'));
+    console.log('  Press Ctrl+C to close the casino.');
+    console.log('');
+  });
+}).catch(e => {
+  console.error('Failed to initialize storage:', e);
+  process.exit(1);
 });

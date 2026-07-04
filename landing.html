@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>TABLE SEVEN — Private Online Blackjack Casino</title>
 <meta name="description" content="TABLE SEVEN — a private online blackjack casino for you and your friends. Live multiplayer, bots, your own Vegas rules, a built-in strategy coach. Free, fake money, real bragging rights.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='18' fill='%230c1f16'/%3E%3Ctext x='50' y='68' font-size='58' text-anchor='middle' fill='%23d4af37'%3E%E2%99%A0%3C/text%3E%3C/svg%3E">
 <style>
   :root {
     --felt: #0a1b13; --felt2: #0c2118; --card: #132b1f; --card2: #0f2419;
@@ -25,9 +26,10 @@
   .wrap { max-width: 1000px; margin: 0 auto; padding: 0 20px; }
 
   /* top bar */
-  .topbar { display: flex; justify-content: space-between; align-items: center; padding: 18px 24px; }
-  .brand { font-size: 1.1rem; letter-spacing: 4px; color: var(--gold); font-weight: bold; }
-  .topnav a { color: var(--muted); font-size: 0.85rem; margin-left: 18px; letter-spacing: 1px; }
+  .topbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px 16px; padding: 14px 20px; }
+  .brand { font-size: 1.1rem; letter-spacing: 4px; color: var(--gold); font-weight: bold; white-space: nowrap; }
+  .topnav { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+  .topnav a { color: var(--muted); font-size: 0.85rem; letter-spacing: 1px; white-space: nowrap; }
   .topnav a:hover { color: var(--gold); }
 
   /* hero */
@@ -51,7 +53,7 @@
   .cta-note { display: block; color: var(--muted); font-size: 0.8rem; margin-top: 12px; letter-spacing: 1px; }
 
   /* fanned cards */
-  .fan { position: relative; height: 190px; margin: 30px auto 0; width: 320px; }
+  .fan { position: relative; height: 190px; margin: 30px auto 0; width: min(320px, 84vw); }
   .fcard {
     position: absolute; left: 50%; top: 20px; width: 92px; height: 130px; border-radius: 9px;
     background: linear-gradient(160deg, #ffffff, #f0e9db); color: #1a1a1a;
@@ -106,7 +108,17 @@
 
   @media (max-width: 720px) {
     .grid, .steps { grid-template-columns: 1fr; }
-    .topnav a { margin-left: 12px; }
+  }
+  @media (max-width: 480px) {
+    /* "TABLE SEVEN" at 8px letter-spacing doesn't fit a narrow phone width on
+       one unbroken line (headings don't wrap mid-word) — this bled past the
+       hero and inflated the whole page's layout viewport, forcing mobile
+       browsers to zoom the entire site out to compensate. Tighter tracking
+       and a lower size floor keep it inside the screen. */
+    .hero h1 { font-size: clamp(1.9rem, 9.5vw, 3.2rem); letter-spacing: 2px; }
+    .suits { letter-spacing: 6px; font-size: 1.1rem; }
+    .topbar { padding: 12px 16px; justify-content: center; }
+    .hero { padding: 28px 14px 16px; }
   }
 </style>
 </head>
@@ -118,6 +130,7 @@
     <a href="#features">Features</a>
     <a href="/vegas-playbook.html">Playbook</a>
     <a href="/blackjack-trainer.html">Trainer</a>
+    <a href="/donate.html">Donate</a>
     <a href="/play">Play</a>
   </div>
 </div>
@@ -193,7 +206,9 @@
     If gambling stops being fun, take a break — 1-800-GAMBLER.
   </p>
   <p style="margin-top:14px">&#9824; TABLE SEVEN &middot; <a href="/play">Play</a> &middot;
-    <a href="/vegas-playbook.html">Playbook</a> &middot; <a href="/blackjack-trainer.html">Solo Trainer</a></p>
+    <a href="/vegas-playbook.html">Playbook</a> &middot; <a href="/blackjack-trainer.html">Solo Trainer</a> &middot;
+    <a href="/donate.html">Donate</a> &middot;
+    <a href="/privacy.html">Privacy</a> &middot; <a href="/terms.html">Terms</a></p>
 </footer>
 
 <script>

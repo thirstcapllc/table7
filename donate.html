@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Support Table Seven — Donate</title>
+<meta name="description" content="Table Seven is free to play. If you enjoy it, chip in to help cover hosting and keep the tables open.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='18' fill='%230c1f16'/%3E%3Ctext x='50' y='68' font-size='58' text-anchor='middle' fill='%23d4af37'%3E%E2%99%A0%3C/text%3E%3C/svg%3E">
+<style>
+  :root {
+    --felt: #0a1b13; --card: #132b1f; --card2: #0f2419;
+    --gold: #d4af37; --gold-dim: #a8892b; --cream: #f3ecd8; --muted: #9db3a5; --line: #234734;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: radial-gradient(ellipse 80% 50% at 50% -10%, #1c4a34 0%, transparent 60%), var(--felt);
+    color: var(--cream); font-family: Georgia, 'Times New Roman', serif; min-height: 100vh;
+    display: flex; flex-direction: column;
+  }
+  a { color: var(--gold-dim); text-decoration: none; }
+  a:hover { color: var(--gold); }
+  .topbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px 16px; padding: 14px 20px; border-bottom: 1px solid var(--gold-dim); }
+  .brand { font-size: 1.05rem; letter-spacing: 4px; color: var(--gold); font-weight: bold; white-space: nowrap; }
+  .topnav { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+  .topnav a { color: var(--muted); font-size: 0.85rem; letter-spacing: 1px; white-space: nowrap; }
+
+  main { flex: 1; display: flex; align-items: center; justify-content: center; padding: 30px 16px; }
+  .card {
+    background: linear-gradient(180deg, rgba(19,43,31,0.95), rgba(15,36,25,0.95));
+    border: 2px solid var(--gold-dim); border-radius: 18px; padding: 34px 30px;
+    width: 100%; max-width: 460px; text-align: center;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+  }
+  .suits { color: var(--gold-dim); letter-spacing: 8px; font-size: 1.1rem; margin-bottom: 8px; opacity: 0.85; }
+  .card h1 { color: var(--gold); font-size: 1.9rem; letter-spacing: 3px; text-shadow: 0 2px 14px rgba(212,175,55,0.3); }
+  .card .lede { color: var(--cream); font-size: 1.02rem; margin: 16px auto 6px; line-height: 1.6; max-width: 380px; }
+  .card .sub { color: var(--muted); font-size: 0.88rem; line-height: 1.6; margin-bottom: 22px; }
+  .paypalWrap {
+    background: var(--card2); border: 1px solid var(--line); border-radius: 12px;
+    padding: 20px 18px 8px; margin: 8px 0 6px; min-height: 70px;
+  }
+  #paypalStatus { color: var(--muted); font-size: 0.82rem; font-style: italic; }
+  .fineprint { color: var(--muted); font-size: 0.72rem; margin-top: 18px; line-height: 1.6; }
+  .chips { margin: 4px 0 14px; }
+  .chip { display: inline-block; width: 30px; height: 30px; border-radius: 50%; margin: 0 -5px;
+    border: 3px dashed rgba(255,255,255,0.7); box-shadow: 0 3px 6px rgba(0,0,0,0.4); vertical-align: middle; }
+  .chip.a { background: #b3452e; } .chip.b { background: #2e7d4f; } .chip.c { background: #232323; } .chip.d { background: #6a3fa0; }
+  footer { text-align: center; padding: 20px; color: var(--muted); font-size: 0.78rem; border-top: 1px solid var(--line); }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">&#9824; TABLE SEVEN</div>
+  <div class="topnav">
+    <a href="/">Home</a>
+    <a href="/play">Play</a>
+    <a href="/vegas-playbook.html">Playbook</a>
+  </div>
+</div>
+
+<main>
+  <div class="card">
+    <div class="suits">&#9824; &#9829; &#9830; &#9827;</div>
+    <h1>KEEP THE TABLES OPEN</h1>
+    <div class="chips">
+      <span class="chip a"></span><span class="chip b"></span><span class="chip c"></span><span class="chip d"></span>
+    </div>
+    <p class="lede">Table Seven is free to play, and always will be.</p>
+    <p class="sub">There's nothing to buy and no real-money betting — but servers and
+       coffee aren't free. If the game's given you a good time, you can toss a
+       tip in the toke box to help cover hosting. Totally optional, hugely appreciated.</p>
+
+    <div class="paypalWrap">
+      <div id="paypal-container-6TMALMY6MPC2N"></div>
+      <div id="paypalStatus">Loading secure PayPal checkout&hellip;</div>
+    </div>
+
+    <p class="fineprint">
+      Payments are handled entirely by PayPal — Table Seven never sees your card
+      or payment details. Donations are voluntary gifts, not purchases, and grant
+      no chips, advantages, or anything of value in the game. Thank you. &#9829;
+    </p>
+  </div>
+</main>
+
+<footer>
+  TABLE SEVEN &middot; <a href="/play">Play</a> &middot;
+  <a href="/privacy.html">Privacy</a> &middot; <a href="/terms.html">Terms</a>
+</footer>
+
+<script
+  src="https://www.paypal.com/sdk/js?client-id=BAAcAhwV6tpROv0VG-Kn_0I1u25oRDNnNAzY6MCL9gHfnjuvhly0ZdjhSaQov69qpFPhF3PW0EaPzCuDfk&components=hosted-buttons&enable-funding=venmo&currency=USD"></script>
+<script>
+  function mountPayPal() {
+    try {
+      if (window.paypal && paypal.HostedButtons) {
+        paypal.HostedButtons({ hostedButtonId: "6TMALMY6MPC2N" }).render("#paypal-container-6TMALMY6MPC2N");
+        var s = document.getElementById('paypalStatus');
+        if (s) s.style.display = 'none';
+      } else {
+        var st = document.getElementById('paypalStatus');
+        if (st) st.textContent = 'Could not load PayPal. Please check your connection or try again later.';
+      }
+    } catch (e) {
+      var st2 = document.getElementById('paypalStatus');
+      if (st2) st2.textContent = 'Could not load PayPal. Please try again later.';
+    }
+  }
+  if (window.paypal) mountPayPal();
+  else window.addEventListener('load', mountPayPal);
+</script>
+
+</body>
+</html>
