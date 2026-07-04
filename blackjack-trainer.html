@@ -1,0 +1,1367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Blackjack Trainer — Practice for Vegas</title>
+<style>
+  :root {
+    --felt: #0c1f16;
+    --card: #132b1f;
+    --card2: #0f2419;
+    --gold: #d4af37;
+    --gold-dim: #a8892b;
+    --cream: #f3ecd8;
+    --muted: #9db3a5;
+    --red: #b3452e;
+    --green: #2e7d4f;
+    --blue: #4a5fa5;
+    --line: #234734;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--felt);
+    color: var(--cream);
+    font-family: Georgia, 'Times New Roman', serif;
+    min-height: 100vh;
+  }
+  header {
+    text-align: center;
+    padding: 16px 16px 10px;
+    background: radial-gradient(ellipse at top, #16382a 0%, var(--felt) 70%);
+    border-bottom: 2px solid var(--gold-dim);
+  }
+  header h1 { font-size: 1.45rem; letter-spacing: 3px; color: var(--gold); text-transform: uppercase; }
+  header p { color: var(--muted); font-style: italic; font-size: 0.82rem; margin-top: 2px; }
+  header a { color: var(--gold-dim); }
+  main { max-width: 900px; margin: 0 auto; padding: 10px 10px 40px; }
+
+  .statbar { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 8px 0; }
+  .stat {
+    background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+    padding: 5px 13px; text-align: center; min-width: 86px;
+  }
+  .stat .lab { font-size: 0.68rem; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+  .stat .val { font-family: Verdana, sans-serif; font-weight: bold; font-size: 1rem; color: var(--gold); }
+  .stat .val.neg { color: #e07a5f; }
+  .stat .val.pos { color: #7fd1a0; }
+
+  /* ---------- the table ---------- */
+  .rail {
+    background: linear-gradient(160deg, #4a2f18 0%, #2b1a0c 55%, #1c1108 100%);
+    border-radius: 150px 150px 26px 26px;
+    padding: 13px;
+    margin: 6px 0 12px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.55), inset 0 2px 3px rgba(255,220,160,0.18);
+  }
+  .tablefelt {
+    background:
+      radial-gradient(ellipse at 50% 0%, #1a6a47 0%, #14563a 45%, #0e3d29 100%);
+    border: 2px solid rgba(212,175,55,0.35);
+    border-radius: 140px 140px 16px 16px;
+    padding: 18px 12px 14px;
+    box-shadow: inset 0 0 55px rgba(0,0,0,0.5);
+    position: relative;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: pan-y;
+  }
+  .feltart { display: block; width: 82%; margin: -14px auto -34px; pointer-events: none; }
+  .feltart text {
+    fill: rgba(226,196,110,0.6);
+    font-family: Georgia, serif;
+    letter-spacing: 5px;
+  }
+  .shoe, .discard, .placard { position: absolute; top: 14px; }
+  .shoe {
+    right: 20px; width: 66px; height: 44px;
+    background: linear-gradient(135deg, #1a1a1a, #333);
+    border-radius: 6px 14px 4px 4px;
+    box-shadow: 0 3px 6px rgba(0,0,0,0.5), inset 0 1px 1px rgba(255,255,255,0.15);
+  }
+  .shoe::after {
+    content: ''; position: absolute; left: 7px; top: 7px; width: 40px; height: 30px;
+    background: repeating-linear-gradient(90deg, #fdfaf2 0 3px, #d9d2c0 3px 4px);
+    border-radius: 2px; transform: skewX(-8deg);
+  }
+  .shoe .lab, .discard .lab {
+    position: absolute; bottom: -15px; left: 0; right: 0; text-align: center;
+    font-size: 0.55rem; color: rgba(243,236,216,0.45); letter-spacing: 1px;
+  }
+  .discard {
+    left: 20px; width: 48px; height: 60px;
+    background: rgba(0,0,0,0.35);
+    border: 2px solid rgba(255,255,255,0.18);
+    border-radius: 5px;
+  }
+  .discard::after {
+    content: ''; position: absolute; left: 5px; bottom: 5px; right: 5px; height: 26px;
+    background: repeating-linear-gradient(0deg, #7a2c1d 0 3px, #93392a 3px 6px);
+    border-radius: 2px;
+  }
+  .placard {
+    right: 100px; top: 18px;
+    background: linear-gradient(#1c1c1c, #111);
+    border: 1px solid var(--gold-dim);
+    border-radius: 6px;
+    padding: 5px 9px;
+    font-size: 0.56rem;
+    letter-spacing: 1px;
+    color: var(--gold);
+    text-align: center;
+    line-height: 1.5;
+    transform: rotate(2deg);
+  }
+  .arealabel {
+    text-align: center; font-size: 0.7rem; color: rgba(243,236,216,0.5);
+    text-transform: uppercase; letter-spacing: 2px; margin-bottom: 5px;
+  }
+  .cards { display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; min-height: 90px; align-items: center; }
+  .pcard {
+    width: 60px; height: 86px; border-radius: 7px; background: #fdfaf2;
+    color: #1a1a1a; position: relative;
+    box-shadow: 1px 2px 5px rgba(0,0,0,0.5);
+    font-family: Verdana, sans-serif;
+    backface-visibility: hidden;
+  }
+  .pcard.dealt { animation: dealin 0.34s cubic-bezier(0.22, 0.7, 0.35, 1); }
+  @keyframes dealin { from { transform: translate(70px, -80px) rotate(9deg); opacity: 0; } to { transform: none; opacity: 1; } }
+  .pcard.flip { animation: flipin 0.3s ease-out; }
+  @keyframes flipin { from { transform: rotateY(88deg); } to { transform: none; } }
+  .pcard .corner { position: absolute; top: 5px; left: 6px; font-size: 0.92rem; font-weight: bold; line-height: 1.05; text-align: center; }
+  .pcard .big { position: absolute; bottom: 5px; right: 7px; font-size: 1.6rem; }
+  .pcard.redsuit { color: #c0392b; }
+  .pcard.back {
+    background: repeating-linear-gradient(45deg, #7a2c1d 0 6px, #93392a 6px 12px);
+    border: 4px solid #fdfaf2;
+  }
+  .cards.mini { min-height: 60px; gap: 3px; }
+  .cards.mini .pcard { width: 42px; height: 60px; border-radius: 5px; }
+  .cards.mini .pcard .corner { font-size: 0.68rem; top: 3px; left: 4px; }
+  .cards.mini .pcard .big { font-size: 1.05rem; bottom: 3px; right: 5px; }
+
+  /* seats */
+  .seatrow { display: flex; justify-content: center; align-items: flex-end; gap: 8px; position: relative; z-index: 2; }
+  .seat { border-radius: 12px; padding: 6px 8px; border: 2px solid transparent; text-align: center; }
+  .seat.ai { flex: 0 1 190px; min-width: 130px; }
+  .seat.you { flex: 0 1 330px; }
+  .seat.activeSeat { border-color: var(--gold); background: rgba(212,175,55,0.08); }
+  .seatname { font-family: Verdana, sans-serif; font-size: 0.68rem; font-weight: bold; letter-spacing: 2px; color: var(--gold); }
+  .seattag { font-size: 0.62rem; color: rgba(243,236,216,0.45); font-style: italic; }
+  .chatline {
+    min-height: 17px; font-size: 0.72rem; font-style: italic; color: #ffd9a0;
+    text-shadow: 0 1px 2px #000; margin-bottom: 3px;
+  }
+  .seatmeta { font-family: Verdana, sans-serif; font-size: 0.72rem; margin-top: 4px; color: var(--cream); }
+  .tally { font-family: Verdana, sans-serif; font-size: 0.68rem; margin-top: 2px; color: var(--muted); }
+  .tally .pos { color: #7fd1a0; } .tally .neg { color: #e07a5f; }
+  .handbox { display: inline-block; padding: 5px 9px 3px; border-radius: 10px; margin: 2px; border: 2px solid transparent; vertical-align: top; }
+  .handbox.active { border-color: var(--gold); background: rgba(212,175,55,0.1); }
+  .handmeta { text-align: center; font-family: Verdana, sans-serif; font-size: 0.78rem; margin-top: 4px; color: var(--cream); }
+  .res { font-weight: bold; }
+  .res.win { color: #7fd1a0; } .res.lose { color: #e07a5f; } .res.push { color: var(--muted); }
+  .totalchip { display: inline-block; background: rgba(0,0,0,0.4); border-radius: 10px; padding: 1px 8px; margin-left: 5px; }
+
+  /* betting circle & chips */
+  .betspot {
+    width: 84px; height: 84px; margin: 6px auto 2px; border-radius: 50%;
+    border: 2px dashed rgba(226,196,110,0.55);
+    display: flex; align-items: center; justify-content: center; flex-direction: column;
+    color: rgba(226,196,110,0.55); font-size: 0.6rem; letter-spacing: 2px;
+  }
+  .chipstack { position: relative; width: 38px; height: 46px; display: inline-block; }
+  .chiptok {
+    position: absolute; left: 2px; width: 34px; height: 34px; border-radius: 50%;
+    border: 4px dashed rgba(255,255,255,0.75);
+    box-shadow: 0 2px 3px rgba(0,0,0,0.45);
+    display: flex; align-items: center; justify-content: center;
+    font-family: Verdana, sans-serif; font-size: 0.6rem; font-weight: bold; color: #fff;
+  }
+  #signalFlash {
+    position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%);
+    font-size: 1.35rem; color: var(--gold); opacity: 0; pointer-events: none;
+    font-family: Verdana, sans-serif; font-weight: bold;
+    text-shadow: 0 2px 8px #000; white-space: nowrap; z-index: 6;
+  }
+  #signalFlash.show { animation: sigflash 0.9s ease-out; }
+  @keyframes sigflash {
+    0% { opacity: 0; transform: translate(-50%, -50%) scale(0.8); }
+    20% { opacity: 1; }
+    100% { opacity: 0; transform: translate(-50%, -70%) scale(1.1); }
+  }
+
+  #message { text-align: center; min-height: 26px; font-size: 1rem; color: var(--cream); margin: 4px 0 8px; font-style: italic; }
+  .controls { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-bottom: 8px; }
+  button {
+    font-family: Verdana, sans-serif; font-size: 0.92rem; font-weight: bold;
+    padding: 10px 18px; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--card); color: var(--cream); cursor: pointer;
+  }
+  button:disabled { opacity: 0.35; cursor: default; }
+  button.primary { background: var(--gold); color: #1a1a1a; border-color: var(--gold); }
+  button.hitbtn { background: var(--red); border-color: var(--red); color: #fff; }
+  button.standbtn { background: var(--green); border-color: var(--green); color: #fff; }
+  button.dblbtn { background: #b78a2a; border-color: #b78a2a; color: #1a1a1a; }
+  button.splitbtn { background: var(--blue); border-color: var(--blue); color: #fff; }
+  .chipbtn { width: 56px; height: 56px; border-radius: 50%; padding: 0; border: 4px dashed rgba(255,255,255,0.7); font-size: 0.88rem; }
+  .chipbtn.c5 { background: #b3452e; color: #fff; }
+  .chipbtn.c10 { background: #2456a3; color: #fff; }
+  .chipbtn.c25 { background: #2e7d4f; color: #fff; }
+  .chipbtn.c50 { background: #6a3fa0; color: #fff; }
+  #coach {
+    background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--gold);
+    border-radius: 0 8px 8px 0; padding: 9px 13px; margin: 8px 0; min-height: 42px; font-size: 0.93rem;
+  }
+  #coach .good { color: #7fd1a0; font-weight: bold; }
+  #coach .bad { color: #e07a5f; font-weight: bold; }
+  #coach .neutral { color: var(--muted); }
+  .togglerow { text-align: center; margin: 6px 0; color: var(--muted); font-size: 0.83rem; }
+  .togglerow label { cursor: pointer; white-space: nowrap; }
+  .keys { text-align: center; color: var(--muted); font-size: 0.76rem; margin-top: 12px; }
+  footer { text-align: center; padding: 14px; color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--line); }
+  @media (max-width: 640px) {
+    .shoe, .discard, .placard { display: none; }
+    .seat.ai { min-width: 104px; }
+    .feltart { width: 96%; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>&#9824; Blackjack Trainer &#9829;</h1>
+  <p>Las Vegas rules &middot; Table 7 &middot; practice like you play &middot;
+     <a href="vegas-playbook.html">back to the Playbook</a></p>
+</header>
+
+<main>
+  <div class="statbar">
+    <div class="stat"><div class="lab">Bankroll</div><div class="val" id="stBank">$300</div></div>
+    <div class="stat"><div class="lab">Session</div><div class="val" id="stNet">$0</div></div>
+    <div class="stat"><div class="lab">Hands</div><div class="val" id="stHands">0</div></div>
+    <div class="stat"><div class="lab">Book Accuracy</div><div class="val" id="stAcc">&mdash;</div></div>
+    <div class="stat"><div class="lab">Shoe</div><div class="val" id="stShoe">312</div></div>
+  </div>
+
+  <div class="rail">
+  <div class="tablefelt" id="felt">
+    <div id="signalFlash"></div>
+    <div class="discard"><span class="lab">DISCARDS</span></div>
+    <div class="shoe"><span class="lab">SHOE</span></div>
+    <div class="placard">TABLE SEVEN &middot; BLACKJACK<br>MIN $5 &mdash; MAX $500</div>
+
+    <div class="arealabel">Dealer <span id="dealerTotal"></span></div>
+    <div class="cards" id="dealerCards"></div>
+
+    <svg class="feltart" viewBox="0 0 1000 230" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <defs>
+        <path id="arcMain" d="M 100 78 A 850 680 0 0 0 900 78" fill="none"/>
+        <path id="arcSub"  d="M 150 145 A 900 720 0 0 0 850 145" fill="none"/>
+      </defs>
+      <text font-size="44" font-weight="bold">
+        <textPath href="#arcMain" startOffset="50%" text-anchor="middle">BLACKJACK PAYS 3 TO 2</textPath>
+      </text>
+      <text font-size="15" letter-spacing="2">
+        <textPath href="#arcSub" startOffset="50%" text-anchor="middle">INSURANCE PAYS 2 TO 1 &#8226; DEALER MUST HIT SOFT 17</textPath>
+      </text>
+    </svg>
+
+    <div class="seatrow">
+      <div class="seat ai" id="seatDoris">
+        <div class="chatline" id="chatDoris"></div>
+        <div class="cards mini" id="cardsDoris"></div>
+        <div class="seatmeta" id="metaDoris"></div>
+        <div><span class="seatname">DORIS</span> <span class="seattag">third base &middot; plays the book</span></div>
+        <div class="tally" id="tallyDoris"></div>
+      </div>
+      <div class="seat you" id="seatYou">
+        <div class="handrow" id="playerHands" style="text-align:center"></div>
+        <div class="betspot" id="betSpot"><span>BET</span></div>
+        <div><span class="seatname">YOU</span></div>
+      </div>
+      <div class="seat ai" id="seatChad">
+        <div class="chatline" id="chatChad"></div>
+        <div class="cards mini" id="cardsChad"></div>
+        <div class="seatmeta" id="metaChad"></div>
+        <div><span class="seatname">CHAD</span> <span class="seattag">first base &middot; bachelor party</span></div>
+        <div class="tally" id="tallyChad"></div>
+      </div>
+    </div>
+
+    <div class="arealabel" id="feltHint" style="display:none; margin-top:10px">&#9757;&#65039; Tap the felt to HIT &nbsp;&middot;&nbsp; &#128075; Wave across it to STAND</div>
+  </div>
+  </div>
+
+  <div id="message">Place your bets.</div>
+
+  <div class="controls" id="betControls">
+    <button class="chipbtn c5" data-chip="5">$5</button>
+    <button class="chipbtn c10" data-chip="10">$10</button>
+    <button class="chipbtn c25" data-chip="25">$25</button>
+    <button class="chipbtn c50" data-chip="50">$50</button>
+    <button id="btnClear">Clear</button>
+    <button id="btnDeal" class="primary" disabled>Deal</button>
+    <button id="btnRebuy" class="primary" style="display:none">Rebuy $300</button>
+  </div>
+
+  <div class="controls" id="playControls" style="display:none">
+    <button id="btnHit" class="hitbtn">Hit (H)</button>
+    <button id="btnStand" class="standbtn">Stand (S)</button>
+    <button id="btnDouble" class="dblbtn">Double Down (D)</button>
+    <button id="btnSplit" class="splitbtn">Split (P)</button>
+  </div>
+
+  <div class="controls" id="insControls" style="display:none">
+    <button id="btnInsYes">Take Insurance</button>
+    <button id="btnInsNo" class="primary">No Insurance</button>
+  </div>
+
+  <div class="controls" id="endControls" style="display:none">
+    <button id="btnNext" class="primary">Next Hand (N)</button>
+  </div>
+
+  <div id="coach"><span class="neutral">Coach is watching. Make your plays and I&rsquo;ll tell you what the book says.</span></div>
+
+  <div class="togglerow">
+    <label><input type="checkbox" id="coachToggle" checked> Coach</label>
+    &nbsp;&middot;&nbsp;
+    <label><input type="checkbox" id="signalToggle" checked> Hand signals</label>
+    &nbsp;&middot;&nbsp;
+    <label><input type="checkbox" id="voiceToggle" checked> Dealer voice</label>
+    &nbsp;&middot;&nbsp;
+    <label><input type="checkbox" id="mateToggle" checked> Table mates</label>
+    &nbsp;&nbsp;<button id="btnReset" style="font-size:0.72rem; padding:4px 10px; font-weight:normal">Reset progress</button>
+  </div>
+
+  <div class="keys">Hand signals, just like a real table: tap the felt to hit &middot; wave your cursor across it to stand<br>
+  Keyboard: H hit &middot; S stand &middot; D double &middot; P split &middot; Enter/N deal &amp; next hand &middot; progress auto-saves in this browser</div>
+</main>
+
+<footer>Practice here, print the chart, then go get &rsquo;em. If it stops being fun, stop.</footer>
+
+<script>
+// __BJ_LOGIC_START__
+// Pure blackjack logic: shoe, hand evaluation, H17 multi-deck basic strategy, dealer play.
+var BJ = (function () {
+  var SUITS = ['♠', '♥', '♦', '♣'];
+  var RANKS = [
+    { r: 'A', v: 11 }, { r: '2', v: 2 }, { r: '3', v: 3 }, { r: '4', v: 4 },
+    { r: '5', v: 5 }, { r: '6', v: 6 }, { r: '7', v: 7 }, { r: '8', v: 8 },
+    { r: '9', v: 9 }, { r: '10', v: 10 }, { r: 'J', v: 10 }, { r: 'Q', v: 10 }, { r: 'K', v: 10 }
+  ];
+
+  function buildShoe(decks) {
+    var shoe = [];
+    for (var d = 0; d < decks; d++) {
+      for (var s = 0; s < SUITS.length; s++) {
+        for (var r = 0; r < RANKS.length; r++) {
+          shoe.push({ r: RANKS[r].r, v: RANKS[r].v, s: SUITS[s] });
+        }
+      }
+    }
+    for (var i = shoe.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var tmp = shoe[i]; shoe[i] = shoe[j]; shoe[j] = tmp;
+    }
+    return shoe;
+  }
+
+  function handValue(cards) {
+    var total = 0, aces = 0;
+    for (var i = 0; i < cards.length; i++) {
+      if (cards[i].r === 'A') { aces++; total += 1; }
+      else total += cards[i].v;
+    }
+    var soft = false;
+    if (aces > 0 && total + 10 <= 21) { total += 10; soft = true; }
+    return { total: total, soft: soft };
+  }
+
+  function isBlackjack(cards) {
+    return cards.length === 2 && handValue(cards).total === 21;
+  }
+
+  // Best play for multi-deck, dealer hits soft 17, double-after-split allowed.
+  // cards: player's cards. u: dealer upcard value 2-10, or 11 for Ace.
+  // opts.canDouble / opts.canSplit reflect what's actually available right now.
+  // Returns 'H' | 'S' | 'D' | 'P'.
+  function recommend(cards, u, opts) {
+    var canDouble = !!(opts && opts.canDouble) && cards.length === 2;
+    var canSplit = !!(opts && opts.canSplit);
+    var hv = handValue(cards);
+    var t = hv.total;
+
+    if (canSplit && cards.length === 2 && cards[0].v === cards[1].v) {
+      var p = cards[0].v;
+      if (p === 11 || p === 8) return 'P';
+      if (p === 9 && u !== 7 && u !== 10 && u !== 11) return 'P';
+      if (p === 7 && u <= 7) return 'P';
+      if (p === 6 && u <= 6) return 'P';
+      if (p === 4 && (u === 5 || u === 6)) return 'P';
+      if ((p === 3 || p === 2) && u <= 7) return 'P';
+      // 10s and 5s never split; other cases fall through to hard/soft logic
+    }
+
+    if (hv.soft) {
+      if (t === 12) return 'H'; // A,A when splitting isn't available
+      if (t >= 20) return 'S';
+      if (t === 19) return (u === 6 && canDouble) ? 'D' : 'S';
+      if (t === 18) {
+        if (u <= 6) return canDouble ? 'D' : 'S';
+        if (u <= 8) return 'S';
+        return 'H';
+      }
+      if (t === 17) return (u >= 3 && u <= 6 && canDouble) ? 'D' : 'H';
+      if (t >= 15) return (u >= 4 && u <= 6 && canDouble) ? 'D' : 'H';
+      return (u >= 5 && u <= 6 && canDouble) ? 'D' : 'H'; // soft 13, 14
+    }
+
+    if (t <= 8) return 'H';
+    if (t === 9) return (u >= 3 && u <= 6 && canDouble) ? 'D' : 'H';
+    if (t === 10) return (u <= 9 && canDouble) ? 'D' : 'H';
+    if (t === 11) return canDouble ? 'D' : 'H';
+    if (t === 12) return (u >= 4 && u <= 6) ? 'S' : 'H';
+    if (t <= 16) return (u <= 6) ? 'S' : 'H';
+    return 'S';
+  }
+
+  // Dealer draws to 17+, hitting soft 17. Mutates cards, pops from shoe.
+  function dealerPlay(cards, shoe) {
+    while (true) {
+      var hv = handValue(cards);
+      if (hv.total > 21) break;
+      if (hv.total > 17) break;
+      if (hv.total === 17 && !hv.soft) break;
+      cards.push(shoe.pop());
+    }
+    return handValue(cards);
+  }
+
+  return {
+    buildShoe: buildShoe, handValue: handValue, isBlackjack: isBlackjack,
+    recommend: recommend, dealerPlay: dealerPlay, RANKS: RANKS, SUITS: SUITS
+  };
+})();
+// __BJ_LOGIC_END__
+
+(function () {
+  var DECKS = 6, RESHUFFLE_AT = 100, START_BANK = 300;
+  var ACTION_NAMES = { H: 'Hit', S: 'Stand', D: 'Double', P: 'Split' };
+
+  // ---------- table mates ----------
+  var AIS = {
+    chad: {
+      key: 'chad', name: 'Chad', style: 'gut', baseBet: 10, seatCap: 'Chad',
+      hit: ['“Hit me!”', '“One more, c’mon.”', '“Let’s ride.”', '“Gimme a little one.”'],
+      stand: ['“I’m good right here.”', '“Stay. Lock it in.”', '“Dealer’s got nothin’.”'],
+      dbl: ['“DOUBLE! Vegas, baby!”', '“All gas, no brakes.”'],
+      bust: ['“Every. Single. Time.”', '“Ah c’mon!”', '“This shoe is rigged.”'],
+      win: ['“PAY THE MAN!”', '“That’s what I’m talkin’ about!”'],
+      lose: ['“Brutal, dealer. Brutal.”']
+    },
+    doris: {
+      key: 'doris', name: 'Doris', style: 'book', baseBet: 25, seatCap: 'Doris',
+      hit: ['“The book says hit, so I hit.”', '“One card, please.”'],
+      stand: ['“And that’s a stay, honey.”', '“I’ll sit right here.”'],
+      dbl: ['“Doubling — the book insists.”'],
+      bust: ['“Even the book busts sometimes.”'],
+      win: ['“Mm-hmm. Forty years of practice.”'],
+      lose: ['“The book giveth, the book taketh.”']
+    }
+  };
+  var aiBanks = { chad: 0, doris: 0 };
+
+  var state = {
+    shoe: BJ.buildShoe(DECKS),
+    bankroll: START_BANK,
+    rebuys: 0,
+    phase: 'bet',   // bet | dealing | insurance | ai1 | play | ai2 | dealerplay | end
+    bet: 0,
+    lastBet: 0,
+    dealer: [],
+    holeHidden: true,
+    hands: [],
+    active: 0,
+    insuranceBet: 0,
+    ai: null,       // { chad: {...}, doris: {...} } during a round with mates
+    turnSeat: null,
+    stats: { rounds: 0, decisions: 0, correct: 0 }
+  };
+
+  var $ = function (id) { return document.getElementById(id); };
+  function fmt(n) { return (n % 1 === 0) ? '$' + n : '$' + n.toFixed(2); }
+  function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+  function matesOn() { return $('mateToggle').checked; }
+  function draw() { return state.shoe.pop(); }
+  function dealerUpValue() {
+    var c = state.dealer[0];
+    return c.r === 'A' ? 11 : c.v;
+  }
+
+  // ---------- saved progress (browser local storage; never leaves this machine) ----------
+  var SAVE_KEY = 'bj-trainer-v1';
+  function saveState() {
+    try {
+      localStorage.setItem(SAVE_KEY, JSON.stringify({
+        bankroll: state.bankroll, rebuys: state.rebuys, lastBet: state.lastBet,
+        stats: state.stats, aiBanks: aiBanks,
+        coach: $('coachToggle').checked,
+        voice: $('voiceToggle').checked,
+        signals: $('signalToggle').checked,
+        mates: $('mateToggle').checked
+      }));
+    } catch (e) { /* storage unavailable: play without saving */ }
+  }
+  function loadState() {
+    try {
+      var s = JSON.parse(localStorage.getItem(SAVE_KEY));
+      if (!s || typeof s.bankroll !== 'number') return false;
+      state.bankroll = s.bankroll;
+      state.rebuys = s.rebuys || 0;
+      state.lastBet = s.lastBet || 0;
+      if (s.stats) state.stats = s.stats;
+      if (s.aiBanks) aiBanks = s.aiBanks;
+      $('coachToggle').checked = s.coach !== false;
+      $('voiceToggle').checked = s.voice !== false;
+      $('signalToggle').checked = s.signals !== false;
+      $('mateToggle').checked = s.mates !== false;
+      return true;
+    } catch (e) { return false; }
+  }
+  function resetProgress() {
+    try { localStorage.removeItem(SAVE_KEY); } catch (e) {}
+    state.bankroll = START_BANK; state.rebuys = 0; state.lastBet = 0;
+    state.stats = { rounds: 0, decisions: 0, correct: 0 };
+    aiBanks = { chad: 0, doris: 0 };
+    state.phase = 'bet'; state.bet = 0; state.hands = []; state.dealer = []; state.ai = null;
+    say('Fresh start &mdash; bankroll back to ' + fmt(START_BANK) + '.');
+    speak('Fresh set up. Good luck.');
+    render();
+  }
+
+  // ---------- dealer & coach voices ----------
+  // Dealer lines interrupt whatever is playing; coach lines queue up behind the
+  // dealer (higher pitch, so the two "people" sound different).
+  function speak(text, opts) {
+    if (!$('voiceToggle').checked || !window.speechSynthesis) return;
+    try {
+      if (!opts || !opts.queue) window.speechSynthesis.cancel();
+      var u = new SpeechSynthesisUtterance(text);
+      u.rate = (opts && opts.rate) || 1.05;
+      u.pitch = (opts && opts.pitch) || 0.95;
+      window.speechSynthesis.speak(u);
+    } catch (e) { /* no voice available */ }
+  }
+  var pendingCoachSpeech = null;
+  function flushCoach() {
+    if (pendingCoachSpeech && $('coachToggle').checked) {
+      speak(pendingCoachSpeech, { queue: true, pitch: 1.25, rate: 1.0 });
+    }
+    pendingCoachSpeech = null;
+  }
+
+  // Short plain-English reason the book play is right — shown and spoken on mistakes.
+  function explainRec(rec, cards, u) {
+    var hv = BJ.handValue(cards);
+    var pair = cards.length === 2 && cards[0].v === cards[1].v;
+    if (rec === 'P') {
+      if (cards[0].r === 'A') return 'Always split aces: two chances at twenty-one.';
+      if (cards[0].v === 8) return 'Always split eights: sixteen is the worst hand in the game.';
+      return 'Two decent hands beat one weak one against this upcard.';
+    }
+    if (rec === 'D') {
+      if (!hv.soft) return 'You are the favorite here, so get more money on the table while you can.';
+      return 'Double the soft hand: you cannot bust, and the dealer’s weak card is in trouble.';
+    }
+    if (rec === 'S') {
+      if (pair && cards[0].v === 10) return 'Twenty wins on its own. Never split it.';
+      if (!hv.soft && hv.total >= 17) return 'Hard seventeen or more always stands.';
+      if (hv.soft && hv.total >= 19) return 'Nineteen or better stands, soft or not.';
+      if (hv.soft && hv.total === 18) return 'Soft eighteen is strong enough here.';
+      if (u <= 6) return 'The dealer’s weak upcard busts often. Make them take the risk, not you.';
+      return 'Standing wins more often than drawing here.';
+    }
+    // rec === 'H'
+    if (hv.soft) return 'A soft hand cannot bust. The card is free, so take it.';
+    if (u >= 7) return 'Against a strong upcard the dealer reaches seventeen-plus too often. You cannot sit on a weak hand.';
+    if (hv.total === 12) return 'Only a ten busts twelve, and this upcard is not weak enough to wait on.';
+    if (hv.total <= 8) return 'Too weak to stand. A card can only help.';
+    return 'The numbers favor taking a card here.';
+  }
+
+  // ---------- hand-signal flash ----------
+  function flashSignal(text) {
+    var el = $('signalFlash');
+    el.textContent = text;
+    el.classList.remove('show');
+    void el.offsetWidth;
+    el.classList.add('show');
+  }
+
+  // ---------- rendering ----------
+  function cardHTML(c, hidden, cls) {
+    if (hidden) return '<div class="pcard back' + (cls || '') + '"></div>';
+    var red = (c.s === '♥' || c.s === '♦') ? ' redsuit' : '';
+    return '<div class="pcard' + red + (cls || '') + '">' +
+      '<div class="corner">' + c.r + '<br>' + c.s + '</div>' +
+      '<div class="big">' + c.s + '</div></div>';
+  }
+
+  // Only newly dealt cards animate in; the dealer's hole card flips on reveal.
+  var prevCounts = {};
+  var prevHoleWasHidden = true;
+  function buildCards(cards, key, hiddenIdx) {
+    var prev = prevCounts[key] || 0;
+    var fresh = cards.length < prev;
+    var flipIdx = -1;
+    if (key === 'dealer') {
+      if (prevHoleWasHidden && hiddenIdx === -1 && cards.length > 1 && !fresh) flipIdx = 1;
+      prevHoleWasHidden = hiddenIdx === 1;
+    }
+    var html = '';
+    for (var i = 0; i < cards.length; i++) {
+      var cls = (fresh || i >= prev) ? ' dealt' : (i === flipIdx ? ' flip' : '');
+      html += cardHTML(cards[i], i === hiddenIdx, cls);
+    }
+    prevCounts[key] = cards.length;
+    return html;
+  }
+
+  function totalLabel(cards) {
+    if (!cards.length) return '';
+    var hv = BJ.handValue(cards);
+    return (hv.soft && hv.total < 21 ? 'soft ' : '') + hv.total;
+  }
+
+  function chipStackHTML(amount) {
+    var denoms = [
+      { v: 100, c: '#232323' }, { v: 50, c: '#6a3fa0' }, { v: 25, c: '#2e7d4f' },
+      { v: 10, c: '#2456a3' }, { v: 5, c: '#b3452e' }
+    ];
+    var chips = [];
+    var rem = amount;
+    denoms.forEach(function (d) {
+      while (rem >= d.v && chips.length < 8) { chips.push(d); rem -= d.v; }
+    });
+    if (!chips.length) return '';
+    var html = '<span class="chipstack" style="height:' + (38 + chips.length * 4) + 'px">';
+    chips.forEach(function (d, i) {
+      html += '<span class="chiptok" style="background:' + d.c + '; bottom:' + (i * 4) + 'px">' +
+        (i === chips.length - 1 ? '$' + d.v : '') + '</span>';
+    });
+    html += '</span>';
+    return html;
+  }
+
+  function renderAISeat(key) {
+    var live = state.ai ? true : matesOn();
+    $('seat' + AIS[key].seatCap).style.display = live ? 'block' : 'none';
+    if (!live) return;
+    var ai = state.ai && state.ai[key];
+    var cardsHtml = '', meta = '', chat = '';
+    if (ai) {
+      cardsHtml = buildCards(ai.cards, key, -1);
+      meta = fmt(ai.bet);
+      var tl = totalLabel(ai.cards);
+      if (tl) meta += ' <span class="totalchip">' + tl + '</span>';
+      if (ai.result) meta += ' <span class="res ' + (ai.resultCls || '') + '">' + ai.result + '</span>';
+      chat = ai.chat || '';
+    }
+    $('cards' + AIS[key].seatCap).innerHTML = cardsHtml;
+    $('meta' + AIS[key].seatCap).innerHTML = meta;
+    $('chat' + AIS[key].seatCap).textContent = chat;
+    var t = aiBanks[key];
+    $('tally' + AIS[key].seatCap).innerHTML = 'trip: <span class="' + (t > 0 ? 'pos' : t < 0 ? 'neg' : '') + '">' +
+      (t >= 0 ? '+' : '−') + fmt(Math.abs(t)) + '</span>';
+    var seatEl = $('seat' + AIS[key].seatCap);
+    if (state.turnSeat === key) seatEl.classList.add('activeSeat'); else seatEl.classList.remove('activeSeat');
+  }
+
+  function render() {
+    // dealer
+    $('dealerCards').innerHTML = buildCards(state.dealer, 'dealer', state.holeHidden ? 1 : -1);
+    if (state.dealer.length === 0) $('dealerTotal').textContent = '';
+    else if (state.holeHidden) $('dealerTotal').innerHTML = '<span class="totalchip">showing ' + dealerUpValue() + '</span>';
+    else $('dealerTotal').innerHTML = '<span class="totalchip">' + totalLabel(state.dealer) + '</span>';
+
+    // your hands
+    var ph = '';
+    for (var h = 0; h < state.hands.length; h++) {
+      var hand = state.hands[h];
+      var activeCls = (state.phase === 'play' && h === state.active && !hand.done) ? ' active' : '';
+      ph += '<div class="handbox' + activeCls + '"><div class="cards">';
+      ph += buildCards(hand.cards, 'you' + h, -1);
+      ph += '</div><div class="handmeta">' + fmt(hand.bet) +
+        ' <span class="totalchip">' + totalLabel(hand.cards) + '</span>';
+      if (hand.result) ph += ' <span class="res ' + hand.resultCls + '">' + hand.result + '</span>';
+      ph += '</div></div>';
+    }
+    $('playerHands').innerHTML = ph;
+
+    // betting circle
+    if (state.phase === 'bet') {
+      $('betSpot').style.display = 'flex';
+      $('betSpot').innerHTML = state.bet > 0
+        ? chipStackHTML(state.bet) + '<span style="margin-top:2px">' + fmt(state.bet) + '</span>'
+        : '<span>BET</span>';
+    } else {
+      $('betSpot').style.display = 'none';
+    }
+
+    // your seat highlight
+    if (state.phase === 'play') $('seatYou').classList.add('activeSeat');
+    else $('seatYou').classList.remove('activeSeat');
+
+    // table mates
+    renderAISeat('chad');
+    renderAISeat('doris');
+
+    // stats
+    $('stBank').textContent = fmt(state.bankroll);
+    var net = state.bankroll - START_BANK * (1 + state.rebuys) + sumOnTable();
+    var netEl = $('stNet');
+    netEl.textContent = (net >= 0 ? '+' : '−') + fmt(Math.abs(net));
+    netEl.className = 'val ' + (net > 0 ? 'pos' : net < 0 ? 'neg' : '');
+    $('stHands').textContent = state.stats.rounds;
+    $('stAcc').textContent = state.stats.decisions === 0 ? '—'
+      : Math.round(100 * state.stats.correct / state.stats.decisions) + '%';
+    $('stShoe').textContent = state.shoe.length;
+
+    // controls
+    $('betControls').style.display = state.phase === 'bet' ? 'flex' : 'none';
+    $('playControls').style.display = state.phase === 'play' ? 'flex' : 'none';
+    $('insControls').style.display = state.phase === 'insurance' ? 'flex' : 'none';
+    $('endControls').style.display = state.phase === 'end' ? 'flex' : 'none';
+    $('feltHint').style.display =
+      (state.phase === 'play' && $('signalToggle').checked) ? 'block' : 'none';
+
+    if (state.phase === 'bet') {
+      $('btnDeal').disabled = state.bet < 5;
+      $('btnRebuy').style.display = (state.bankroll < 5 && state.bet === 0) ? 'inline-block' : 'none';
+    }
+    if (state.phase === 'play') {
+      var hd = state.hands[state.active];
+      var pair = hd.cards.length === 2 && hd.cards[0].v === hd.cards[1].v;
+      $('btnDouble').disabled = !(hd.cards.length === 2 && state.bankroll >= hd.bet);
+      $('btnSplit').disabled = !(pair && state.hands.length < 4 && state.bankroll >= hd.bet);
+    }
+    if (state.phase === 'insurance') {
+      $('btnInsYes').disabled = state.bankroll < state.bet / 2;
+    }
+  }
+
+  function sumOnTable() {
+    if (state.phase === 'bet') return 0;
+    var s = state.insuranceBet;
+    for (var i = 0; i < state.hands.length; i++) {
+      if (!state.hands[i].settled) s += state.hands[i].bet;
+    }
+    return s;
+  }
+
+  function say(msg) { $('message').innerHTML = msg; }
+
+  function coach(html, cls) {
+    if (!$('coachToggle').checked) return;
+    $('coach').innerHTML = cls ? '<span class="' + cls + '">' + html + '</span>' : html;
+  }
+
+  function setChat(key, text) {
+    if (state.ai && state.ai[key]) state.ai[key].chat = text;
+  }
+
+  // ---------- decisions & accuracy ----------
+  function recordDecision(action, hand) {
+    var opts = {
+      canDouble: hand.cards.length === 2 && state.bankroll >= hand.bet,
+      canSplit: hand.cards.length === 2 && hand.cards[0].v === hand.cards[1].v &&
+        state.hands.length < 4 && state.bankroll >= hand.bet
+    };
+    var rec = BJ.recommend(hand.cards, dealerUpValue(), opts);
+    state.stats.decisions++;
+    if (action === rec) {
+      state.stats.correct++;
+      coach('&#10004; ' + ACTION_NAMES[action] + ' &mdash; that’s the book play. ' +
+        handDesc(hand), 'good');
+      pendingCoachSpeech = null;
+    } else {
+      var reason = explainRec(rec, hand.cards, dealerUpValue());
+      coach('&#10008; You chose <b>' + ACTION_NAMES[action] + '</b> &mdash; the book says <b>' +
+        ACTION_NAMES[rec] + '</b>. ' + handDesc(hand) +
+        '<br><span class="neutral">Why: ' + reason + '</span>', 'bad');
+      pendingCoachSpeech = 'Coach here. ' + ACTION_NAMES[rec] + ' was the play, not ' +
+        ACTION_NAMES[action] + '. ' + reason;
+    }
+  }
+
+  function handDesc(hand) {
+    var hv = BJ.handValue(hand.cards);
+    return '<span class="neutral">(' + (hv.soft ? 'soft ' : '') + hv.total +
+      ' vs dealer ' + (dealerUpValue() === 11 ? 'Ace' : dealerUpValue()) + ')</span>';
+  }
+
+  function announceHand(hand) {
+    var hv = BJ.handValue(hand.cards);
+    var up = dealerUpValue();
+    speak((hv.soft ? 'Soft ' : '') + hv.total + ' against ' + (up === 11 ? 'an ace' : 'a ' + up) + '.');
+  }
+
+  // ---------- betting ----------
+  function addChip(v) {
+    if (state.phase !== 'bet') return;
+    if (state.bet + v > state.bankroll) { say('Not enough bankroll for that chip.'); return; }
+    state.bet += v;
+    say('Money plays &mdash; ' + fmt(state.bet) + ' in the circle. Deal when ready.');
+    render();
+  }
+
+  function clearBet() {
+    if (state.phase !== 'bet') return;
+    state.bet = 0;
+    say('Place your bets.');
+    render();
+  }
+
+  // ---------- the deal ----------
+  function freshAI(key) {
+    return { cards: [], bet: AIS[key].baseBet, done: false, busted: false,
+      settled: false, result: null, resultCls: '', chat: '', insured: false };
+  }
+
+  function dealRound() {
+    if (state.phase !== 'bet' || state.bet < 5 || state.bet > state.bankroll) return;
+    if (state.shoe.length < RESHUFFLE_AT) {
+      state.shoe = BJ.buildShoe(DECKS);
+      say('Shuffling up...');
+    }
+    state.lastBet = state.bet;
+    state.bankroll -= state.bet;
+    state.dealer = [];
+    state.holeHidden = true;
+    state.insuranceBet = 0;
+    state.hands = [{ cards: [], bet: state.bet, done: false, busted: false,
+      splitAces: false, result: null, settled: false }];
+    state.active = 0;
+    state.ai = matesOn() ? { chad: freshAI('chad'), doris: freshAI('doris') } : null;
+    state.turnSeat = null;
+    state.phase = 'dealing';
+    say('No more bets.');
+    speak('No more bets.');
+    render();
+
+    // deal order, exactly like the real thing: first base to third base, dealer last
+    var seq = [];
+    for (var round = 0; round < 2; round++) {
+      if (state.ai) seq.push(state.ai.chad.cards);
+      seq.push(state.hands[0].cards);
+      if (state.ai) seq.push(state.ai.doris.cards);
+      seq.push(state.dealer);
+    }
+    var i = 0;
+    var stepDeal = function () {
+      seq[i].push(draw());
+      i++;
+      render();
+      if (i < seq.length) setTimeout(stepDeal, 200);
+      else setTimeout(onDealt, 350);
+    };
+    setTimeout(stepDeal, 250);
+  }
+
+  function onDealt() {
+    var up = dealerUpValue();
+    if (up === 11) {
+      state.phase = 'insurance';
+      say('Dealer shows an <b>Ace</b> &mdash; insurance is open.');
+      speak('Insurance is open. Dealer shows an ace.');
+      coach('Book play: <b>No</b>. Insurance is a side bet with a ~7% house edge. Always decline.', 'neutral');
+      if (state.ai) {
+        if (Math.random() < 0.3) {
+          state.ai.chad.insured = true;
+          aiBanks.chad -= state.ai.chad.bet / 2;
+          setChat('chad', '“I got a feeling. Insurance!”');
+        } else {
+          setChat('chad', '“Nah, I never win those.”');
+        }
+        setChat('doris', '“Never take insurance, dear.”');
+      }
+      render();
+      return;
+    }
+    say('Dealer shows ' + (up === 10 ? 'a ten. Checking...' : 'a ' + up + '.'));
+    resolvePeek();
+  }
+
+  function insurance(take) {
+    state.stats.decisions++;
+    if (take) {
+      state.insuranceBet = state.bet / 2;
+      state.bankroll -= state.insuranceBet;
+      coach('&#10008; The book never takes insurance &mdash; but let’s see how it goes.', 'bad');
+      pendingCoachSpeech = 'Coach here. Never take insurance. It is a side bet that loses money in the long run.';
+    } else {
+      state.stats.correct++;
+      coach('&#10004; Correct &mdash; never take insurance.', 'good');
+      pendingCoachSpeech = null;
+    }
+    say('Insurance closed.');
+    resolvePeek();
+    flushCoach();
+  }
+
+  function setResult(hand, text, cls) {
+    hand.result = text; hand.resultCls = cls; hand.done = true; hand.settled = true;
+  }
+
+  function resolvePeek() {
+    var up = dealerUpValue();
+    var dealerBJ = BJ.isBlackjack(state.dealer);
+    var playerBJ = BJ.isBlackjack(state.hands[0].cards);
+
+    if ((up === 10 || up === 11) && dealerBJ) {
+      state.holeHidden = false;
+      var msg = 'Dealer has <b>blackjack</b>. ';
+      if (playerBJ) {
+        state.bankroll += state.hands[0].bet;
+        setResult(state.hands[0], 'Push', 'push');
+        msg += 'You also have blackjack &mdash; push.';
+      } else {
+        setResult(state.hands[0], 'Lose', 'lose');
+        msg += 'Hand over.';
+      }
+      if (state.insuranceBet > 0) {
+        state.bankroll += state.insuranceBet * 3;
+        msg += ' Your insurance bet pays 2:1.';
+        state.insuranceBet = 0;
+      }
+      if (state.ai) {
+        ['chad', 'doris'].forEach(function (k) {
+          var ai = state.ai[k];
+          if (BJ.isBlackjack(ai.cards)) { ai.result = 'Push'; ai.resultCls = 'push'; }
+          else { aiBanks[k] -= ai.bet; ai.result = 'Lose'; ai.resultCls = 'lose'; }
+          if (ai.insured) { aiBanks[k] += 1.5 * ai.bet; setChat(k, '“Told you! Insurance pays!”'); }
+          ai.settled = true; ai.done = true;
+        });
+      }
+      speak('Dealer has blackjack.' + (playerBJ ? ' Push.' : ''));
+      endRound(msg);
+      return;
+    }
+
+    if (up === 10 || up === 11) say('No blackjack.');
+    if (state.insuranceBet > 0) {
+      say('No blackjack &mdash; insurance bets lost.');
+      state.insuranceBet = 0;
+    }
+
+    if (state.ai) {
+      ['chad', 'doris'].forEach(function (k) {
+        var ai = state.ai[k];
+        if (BJ.isBlackjack(ai.cards)) {
+          aiBanks[k] += 1.5 * ai.bet;
+          ai.result = 'Blackjack!'; ai.resultCls = 'win';
+          ai.settled = true; ai.done = true;
+          setChat(k, pick(AIS[k].win));
+        }
+      });
+    }
+
+    if (playerBJ) {
+      state.bankroll += state.hands[0].bet * 2.5;
+      setResult(state.hands[0], 'Blackjack! +' + fmt(state.hands[0].bet * 1.5), 'win');
+      speak('Blackjack! Paid three to two. ' + pick(['Well done.', 'Nice.', 'Money.']));
+    }
+
+    runAI('chad', function () {
+      if (state.hands[0].settled) { afterPlayer(); return; }
+      state.phase = 'play';
+      state.turnSeat = null;
+      say('Your action.');
+      announceHand(state.hands[0]);
+      render();
+    });
+  }
+
+  // ---------- AI turns ----------
+  function aiDecide(def, cards) {
+    var u = dealerUpValue();
+    var r = BJ.recommend(cards, u, { canDouble: cards.length === 2, canSplit: false });
+    if (def.style === 'book') return r;
+    // Chad plays by gut: classic tourist mistakes
+    var hv = BJ.handValue(cards);
+    if (r === 'D' && hv.soft) return 'H';                       // "double a soft hand? no way"
+    if (r === 'D' && Math.random() < 0.4) return 'H';           // scared money
+    if (r === 'H' && !hv.soft && hv.total >= 12 && hv.total <= 16 && u >= 7 && Math.random() < 0.45)
+      return 'S';                                               // afraid to bust
+    if (r === 'S' && !hv.soft && hv.total === 12 && Math.random() < 0.3) return 'H'; // fidgety on 12
+    return r;
+  }
+
+  function aiBust(key, ai, def) {
+    ai.busted = true; ai.settled = true;
+    ai.result = 'Bust'; ai.resultCls = 'lose';
+    aiBanks[key] -= ai.bet;
+    setChat(key, pick(def.bust));
+    speak(def.name + ' busts.');
+  }
+
+  function runAI(key, done) {
+    if (!state.ai) { done(); return; }
+    var ai = state.ai[key], def = AIS[key];
+    if (ai.done || ai.settled) { done(); return; }
+    state.phase = (key === 'chad') ? 'ai1' : 'ai2';
+    state.turnSeat = key;
+    say(def.name + ' to act.');
+    render();
+    var finish = function (delay) {
+      ai.done = true;
+      state.turnSeat = null;
+      render();
+      setTimeout(done, delay);
+    };
+    var step = function () {
+      var hv = BJ.handValue(ai.cards);
+      if (hv.total >= 21) { finish(450); return; }
+      var act = aiDecide(def, ai.cards);
+      if (act === 'S') {
+        setChat(key, pick(def.stand));
+        finish(550);
+        return;
+      }
+      if (act === 'D') {
+        ai.bet *= 2;
+        setChat(key, pick(def.dbl));
+        ai.cards.push(draw());
+        if (BJ.handValue(ai.cards).total > 21) aiBust(key, ai, def);
+        finish(700);
+        return;
+      }
+      // hit
+      setChat(key, pick(def.hit));
+      ai.cards.push(draw());
+      if (BJ.handValue(ai.cards).total > 21) { aiBust(key, ai, def); finish(600); return; }
+      render();
+      setTimeout(step, 700);
+    };
+    setTimeout(step, 550);
+  }
+
+  function afterPlayer() {
+    runAI('doris', function () { dealerTurn(); });
+  }
+
+  // ---------- your actions ----------
+  function currentHand() { return state.hands[state.active]; }
+
+  function doHit() {
+    var h = currentHand();
+    recordDecision('H', h);
+    h.cards.push(draw());
+    var hv = BJ.handValue(h.cards);
+    if (hv.total > 21) {
+      h.busted = true;
+      setResult(h, 'Bust', 'lose');
+      h.settled = true;
+      speak(hv.total + '. Too many.');
+      nextHand();
+    } else if (hv.total === 21) {
+      h.done = true;
+      speak('Twenty one.');
+      nextHand();
+    } else {
+      speak(String(hv.total));
+      render();
+    }
+    flushCoach();
+  }
+
+  function doStand() {
+    var h = currentHand();
+    recordDecision('S', h);
+    h.done = true;
+    nextHand();
+    flushCoach();
+  }
+
+  function doDouble() {
+    var h = currentHand();
+    if (h.cards.length !== 2 || state.bankroll < h.bet) return;
+    recordDecision('D', h);
+    state.bankroll -= h.bet;
+    h.bet *= 2;
+    h.doubled = true;
+    h.cards.push(draw());
+    var dt = BJ.handValue(h.cards).total;
+    if (dt > 21) {
+      h.busted = true;
+      setResult(h, 'Bust', 'lose');
+      speak('Doubling down. ' + dt + '. Too many.');
+    } else {
+      speak('Doubling down. ' + dt + '.');
+    }
+    h.done = true;
+    nextHand();
+    flushCoach();
+  }
+
+  function doSplit() {
+    var h = currentHand();
+    var pair = h.cards.length === 2 && h.cards[0].v === h.cards[1].v;
+    if (!pair || state.hands.length >= 4 || state.bankroll < h.bet) return;
+    recordDecision('P', h);
+    state.bankroll -= h.bet;
+    var c2 = h.cards.pop();
+    var aces = h.cards[0].r === 'A';
+    speak(aces ? 'Splitting aces.' : 'Splitting the pair.');
+    h.splitAces = aces;
+    state.hands.splice(state.active + 1, 0, {
+      cards: [c2], bet: h.bet, done: false, busted: false,
+      splitAces: aces, result: null, settled: false
+    });
+    h.cards.push(draw());
+    if (aces) {
+      h.done = true;
+    } else if (BJ.handValue(h.cards).total === 21) {
+      h.done = true;
+    }
+    if (h.done) nextHand(); else render();
+    flushCoach();
+  }
+
+  function nextHand() {
+    while (true) {
+      var idx = -1;
+      for (var i = 0; i < state.hands.length; i++) {
+        if (!state.hands[i].done) { idx = i; break; }
+      }
+      if (idx === -1) { afterPlayer(); return; }
+      state.active = idx;
+      var h = state.hands[idx];
+      if (h.cards.length === 1) {
+        h.cards.push(draw());
+        if (h.splitAces) { h.done = true; continue; }
+        if (BJ.handValue(h.cards).total === 21) { h.done = true; continue; }
+      }
+      say('Your action' + (state.hands.length > 1 ? ' (hand ' + (idx + 1) + ' of ' + state.hands.length + ')' : '') + '.');
+      render();
+      return;
+    }
+  }
+
+  // ---------- dealer's turn & settlement ----------
+  function anyLiveHands() {
+    for (var i = 0; i < state.hands.length; i++) {
+      if (!state.hands[i].settled && BJ.handValue(state.hands[i].cards).total <= 21) return true;
+    }
+    if (state.ai) {
+      if (!state.ai.chad.settled) return true;
+      if (!state.ai.doris.settled) return true;
+    }
+    return false;
+  }
+
+  function dealerShouldHit(hv) {
+    return hv.total < 17 || (hv.total === 17 && hv.soft);
+  }
+
+  function dealerTurn() {
+    state.phase = 'dealerplay';
+    state.turnSeat = null;
+    state.holeHidden = false;
+    render();
+    var live = anyLiveHands();
+    say('Dealer turns over &mdash; ' + totalLabel(state.dealer) + '.');
+    var step = function () {
+      var hv = BJ.handValue(state.dealer);
+      if (live && dealerShouldHit(hv)) {
+        state.dealer.push(draw());
+        render();
+        setTimeout(step, 600);
+      } else {
+        settleAll(live);
+      }
+    };
+    setTimeout(step, 700);
+  }
+
+  function settleAll(anyLive) {
+    var dv = BJ.handValue(state.dealer);
+    var wins = 0, losses = 0, pushes = 0;
+    for (var j = 0; j < state.hands.length; j++) {
+      var h = state.hands[j];
+      if (h.settled) { if (h.busted) losses++; continue; }
+      var pv = BJ.handValue(h.cards);
+      if (dv.total > 21 || pv.total > dv.total) {
+        state.bankroll += h.bet * 2;
+        setResult(h, 'Win +' + fmt(h.bet), 'win');
+        wins++;
+      } else if (pv.total < dv.total) {
+        setResult(h, 'Lose', 'lose');
+        losses++;
+      } else {
+        state.bankroll += h.bet;
+        setResult(h, 'Push', 'push');
+        pushes++;
+      }
+    }
+    if (state.ai) {
+      ['chad', 'doris'].forEach(function (k) {
+        var ai = state.ai[k];
+        if (ai.settled) return;
+        var pv = BJ.handValue(ai.cards);
+        if (dv.total > 21 || pv.total > dv.total) {
+          aiBanks[k] += ai.bet;
+          ai.result = 'Win'; ai.resultCls = 'win';
+          if (Math.random() < 0.6) setChat(k, pick(AIS[k].win));
+        } else if (pv.total < dv.total) {
+          aiBanks[k] -= ai.bet;
+          ai.result = 'Lose'; ai.resultCls = 'lose';
+          if (Math.random() < 0.4) setChat(k, pick(AIS[k].lose));
+        } else {
+          ai.result = 'Push'; ai.resultCls = 'push';
+        }
+        ai.settled = true;
+      });
+    }
+
+    var msg, spoken;
+    if (!anyLive) {
+      msg = 'Table busts &mdash; dealer takes it. ';
+      spoken = '';
+    } else if (dv.total > 21) {
+      msg = 'Dealer busts with ' + dv.total + '! ';
+      spoken = 'Dealer busts with ' + dv.total + '. ';
+    } else {
+      msg = 'Dealer has ' + dv.total + '. ';
+      spoken = 'Dealer has ' + dv.total + '. ';
+    }
+    if (spoken) {
+      if (wins > 0 && losses === 0) spoken += pick(['Winner!', 'Nice hand.', 'There it is.', 'Money plays.']);
+      else if (wins === 0 && losses > 0 && pushes === 0) spoken += 'Dealer takes it.';
+      else if (pushes > 0 && wins === 0 && losses === 0) spoken += 'Push.';
+      speak(spoken);
+    }
+    if (state.hands.length > 1) {
+      msg += wins + ' won, ' + losses + ' lost' + (pushes ? ', ' + pushes + ' pushed' : '') + '.';
+    }
+    endRound(msg);
+  }
+
+  function endRound(msg) {
+    state.phase = 'end';
+    state.turnSeat = null;
+    state.stats.rounds++;
+    saveState();
+    say(msg + ' &nbsp;<i>Next hand?</i>');
+    render();
+  }
+
+  function newHand() {
+    state.phase = 'bet';
+    state.dealer = [];
+    state.hands = [];
+    state.ai = null;
+    state.turnSeat = null;
+    state.bet = (state.lastBet <= state.bankroll) ? state.lastBet : 0;
+    say(state.bet > 0
+      ? 'Place your bets &mdash; ' + fmt(state.bet) + ' rides again. Deal, add chips, or Clear.'
+      : 'Place your bets.');
+    saveState();
+    render();
+  }
+
+  function rebuy() {
+    state.bankroll += START_BANK;
+    state.rebuys++;
+    say('Rebought for ' + fmt(START_BANK) + '. In Vegas this is the ATM trip we talked about avoiding...');
+    speak('Rebuy. Three hundred more. Careful now.');
+    saveState();
+    render();
+  }
+
+  // ---------- wire up ----------
+  var chipBtns = document.querySelectorAll('.chipbtn');
+  for (var i = 0; i < chipBtns.length; i++) {
+    (function (btn) {
+      btn.addEventListener('click', function () { addChip(parseInt(btn.dataset.chip, 10)); });
+    })(chipBtns[i]);
+  }
+  $('btnClear').addEventListener('click', clearBet);
+  $('btnDeal').addEventListener('click', dealRound);
+  $('btnRebuy').addEventListener('click', rebuy);
+  $('btnHit').addEventListener('click', doHit);
+  $('btnStand').addEventListener('click', doStand);
+  $('btnDouble').addEventListener('click', doDouble);
+  $('btnSplit').addEventListener('click', doSplit);
+  $('btnInsYes').addEventListener('click', function () { insurance(true); });
+  $('btnInsNo').addEventListener('click', function () { insurance(false); });
+  $('btnNext').addEventListener('click', newHand);
+  $('btnReset').addEventListener('click', resetProgress);
+  $('coachToggle').addEventListener('change', saveState);
+  $('signalToggle').addEventListener('change', function () { saveState(); render(); });
+  $('voiceToggle').addEventListener('change', function () {
+    if (this.checked) speak('Dealer voice on. Good luck.');
+    saveState();
+  });
+  $('mateToggle').addEventListener('change', function () { saveState(); render(); });
+
+  // Hand-signal gestures on the felt: tap = hit, horizontal wave = stand.
+  var gesture = null;
+  var felt = $('felt');
+  felt.addEventListener('pointerdown', function (e) {
+    if (state.phase !== 'play' || !$('signalToggle').checked) return;
+    gesture = { x0: e.clientX, y0: e.clientY, t0: Date.now(), maxDX: 0 };
+  });
+  felt.addEventListener('pointermove', function (e) {
+    if (!gesture) return;
+    gesture.maxDX = Math.max(gesture.maxDX, Math.abs(e.clientX - gesture.x0));
+  });
+  felt.addEventListener('pointerup', function (e) {
+    if (!gesture) return;
+    var g = gesture;
+    gesture = null;
+    if (state.phase !== 'play') return;
+    var dx = Math.abs(e.clientX - g.x0);
+    var dy = Math.abs(e.clientY - g.y0);
+    var dt = Date.now() - g.t0;
+    if (Math.max(dx, g.maxDX) > 60 && Math.max(dx, g.maxDX) > dy) {
+      flashSignal('👋 Wave — standing');
+      doStand();
+    } else if (dx < 12 && dy < 12 && dt < 500) {
+      flashSignal('☝️ Tap — hit me');
+      doHit();
+    }
+  });
+  felt.addEventListener('pointercancel', function () { gesture = null; });
+
+  document.addEventListener('keydown', function (e) {
+    var k = e.key.toLowerCase();
+    if (state.phase === 'play') {
+      if (k === 'h') doHit();
+      else if (k === 's') doStand();
+      else if (k === 'd' && !$('btnDouble').disabled) doDouble();
+      else if (k === 'p' && !$('btnSplit').disabled) doSplit();
+    } else if (state.phase === 'bet' && (k === 'enter' || k === 'n')) {
+      if (state.bet >= 5) dealRound();
+    } else if (state.phase === 'end' && (k === 'enter' || k === 'n')) {
+      newHand();
+    } else if (state.phase === 'insurance') {
+      if (k === 'y') insurance(true);
+      if (k === 'n') insurance(false);
+    }
+  });
+
+  var restored = loadState();
+  render();
+  if (restored && state.stats.rounds > 0) {
+    var accTxt = state.stats.decisions > 0
+      ? Math.round(100 * state.stats.correct / state.stats.decisions) + '% book accuracy'
+      : 'no decisions yet';
+    say('Welcome back &mdash; bankroll ' + fmt(state.bankroll) + ', ' +
+      state.stats.rounds + ' hands played, ' + accTxt + '. Place your bets.');
+  }
+})();
+</script>
+
+</body>
+</html>

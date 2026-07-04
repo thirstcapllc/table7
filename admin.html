@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PIT BOSS — Table Seven</title>
+<style>
+  :root {
+    --felt: #0c1f16; --card: #132b1f; --card2: #0f2419;
+    --gold: #d4af37; --gold-dim: #a8892b; --cream: #f3ecd8; --muted: #9db3a5;
+    --red: #b3452e; --green: #2e7d4f; --line: #234734;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--felt); color: var(--cream); font-family: Georgia, serif; min-height: 100vh; }
+  header {
+    text-align: center; padding: 16px;
+    background: radial-gradient(ellipse at top, #16382a 0%, var(--felt) 70%);
+    border-bottom: 2px solid var(--gold-dim);
+  }
+  header h1 { font-size: 1.5rem; letter-spacing: 5px; color: var(--gold); }
+  header p { color: var(--muted); font-style: italic; font-size: 0.82rem; margin-top: 2px; }
+  header a { color: var(--gold-dim); }
+  main { max-width: 860px; margin: 0 auto; padding: 16px 12px 50px; }
+  h2 { color: var(--gold); font-size: 1.1rem; letter-spacing: 2px; margin: 22px 0 10px; border-bottom: 1px solid var(--line); padding-bottom: 5px; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.88rem; }
+  th, td { border: 1px solid var(--line); padding: 7px 9px; text-align: left; }
+  th { background: var(--card2); color: var(--gold); font-family: Verdana, sans-serif; font-size: 0.72rem; letter-spacing: 1px; }
+  tr:nth-child(even) td { background: rgba(255,255,255,0.03); }
+  .cash { font-family: Verdana, sans-serif; font-weight: bold; color: var(--gold); }
+  button {
+    font-family: Verdana, sans-serif; font-size: 0.78rem; font-weight: bold;
+    padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line);
+    background: var(--card); color: var(--cream); cursor: pointer; margin: 2px;
+  }
+  button.primary { background: var(--gold); color: #1a1a1a; border-color: var(--gold); }
+  button.credit { background: var(--green); border-color: var(--green); color: #fff; }
+  input {
+    padding: 7px 9px; border-radius: 8px; border: 1px solid var(--line);
+    background: var(--card2); color: var(--cream); font-family: Verdana, sans-serif; font-size: 0.85rem;
+  }
+  input.amt { width: 84px; text-align: right; }
+  .tag { display: inline-block; background: rgba(0,0,0,0.4); border-radius: 10px; padding: 1px 8px; font-family: Verdana, sans-serif; font-size: 0.72rem; }
+  .on { color: #7fd1a0; } .off { color: #e07a5f; }
+  #status { text-align: center; min-height: 22px; margin: 8px 0; font-style: italic; color: var(--muted); }
+  #status .err { color: #e07a5f; } #status .good { color: #7fd1a0; }
+  #lock { max-width: 380px; margin: 60px auto; background: var(--card); border: 2px solid var(--gold-dim); border-radius: 14px; padding: 26px; text-align: center; }
+  #lock h2 { border: none; margin-top: 0; }
+  #lock input { width: 100%; text-align: center; margin: 12px 0; }
+  #lock button { width: 100%; padding: 10px; font-size: 0.95rem; }
+  #lock p { color: var(--muted); font-size: 0.8rem; margin-top: 12px; line-height: 1.5; }
+  .muted { color: var(--muted); font-size: 0.78rem; }
+  footer { text-align: center; padding: 14px; color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--line); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>&#9824; PIT BOSS &#9829;</h1>
+  <p>Table Seven house controls &middot; <a href="/">back to the floor</a></p>
+</header>
+
+<main>
+  <div id="lock">
+    <h2>House eyes only</h2>
+    <input id="keyInput" type="password" placeholder="Pit boss key" autocomplete="off">
+    <button class="primary" id="btnUnlock">Unlock</button>
+    <p>The key is printed in the server console at startup.<br>
+       Set <b>TABLE_ADMIN_KEY</b> (env var) to make it permanent.</p>
+    <div id="lockErr" style="color:#e07a5f; min-height:18px; margin-top:8px"></div>
+  </div>
+
+  <div id="panel" style="display:none">
+    <div id="status"></div>
+
+    <h2>CAGE ACCOUNTS</h2>
+    <table>
+      <thead><tr><th>Player</th><th>Cage Cash</th><th>Comps</th><th>At Table</th><th>Adjust</th></tr></thead>
+      <tbody id="accRows"></tbody>
+    </table>
+    <p class="muted" style="margin-top:6px">Credits go to the player&rsquo;s cage cash. If they&rsquo;re seated, their
+      table feed announces it and their screen updates live. Use a negative amount to dock.</p>
+
+    <h2>OPEN TABLES</h2>
+    <table>
+      <thead><tr><th>Code</th><th>Phase</th><th>Round</th><th>Players</th></tr></thead>
+      <tbody id="tableRows"></tbody>
+    </table>
+
+    <p style="text-align:center; margin-top:18px">
+      <button id="btnLockUp">Lock the console</button>
+    </p>
+  </div>
+</main>
+
+<footer>TABLE SEVEN &middot; the house always watches</footer>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  function fmt(n) { return (n % 1 === 0) ? '$' + n : '$' + n.toFixed(2); }
+  function esc(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  var key = '';
+  try { key = localStorage.getItem('t7-admin') || ''; } catch (e) {}
+  var unlocked = false;
+  var refreshTimer = null;
+
+  function post(path, body) {
+    return fetch(path, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(Object.assign({ key: key }, body || {}))
+    }).then(function (r) { return r.json().then(function (d) { return { status: r.status, data: d }; }); });
+  }
+
+  function status(msg, cls) {
+    $('status').innerHTML = msg ? '<span class="' + (cls || '') + '">' + msg + '</span>' : '';
+  }
+
+  function lockUp(msg) {
+    unlocked = false;
+    if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
+    $('panel').style.display = 'none';
+    $('lock').style.display = 'block';
+    $('lockErr').textContent = msg || '';
+    try { localStorage.removeItem('t7-admin'); } catch (e) {}
+  }
+
+  function render(d) {
+    var rows = '';
+    d.accounts.forEach(function (a) {
+      rows += '<tr>' +
+        '<td>' + esc(a.name) + '</td>' +
+        '<td class="cash">' + fmt(a.cash) + '</td>' +
+        '<td>' + a.comps + '</td>' +
+        '<td>' + (a.seated ? '<span class="tag">' + esc(a.seated) + '</span>' : '<span class="muted">—</span>') + '</td>' +
+        '<td>' +
+          '<button class="credit" data-t="' + a.token + '" data-a="100">+$100</button>' +
+          '<button class="credit" data-t="' + a.token + '" data-a="1000">+$1,000</button>' +
+          '<input class="amt" type="number" step="5" placeholder="±$" data-for="' + a.token + '">' +
+          '<button class="apply" data-t="' + a.token + '">Apply</button>' +
+        '</td></tr>';
+    });
+    $('accRows').innerHTML = rows || '<tr><td colspan="5" class="muted">No accounts yet — the cage is quiet.</td></tr>';
+
+    var trows = '';
+    d.tables.forEach(function (t) {
+      var ps = t.players.map(function (q) {
+        return esc(q.name) + ' (' + fmt(q.chips) + (q.connected ? '' : ', <span class="off">away</span>') + ')';
+      }).join(', ');
+      trows += '<tr><td><span class="tag">' + esc(t.code) + '</span></td><td>' + esc(t.phase) +
+        '</td><td>' + t.round + '</td><td>' + (ps || '<span class="muted">empty</span>') + '</td></tr>';
+    });
+    $('tableRows').innerHTML = trows || '<tr><td colspan="4" class="muted">No tables open right now.</td></tr>';
+  }
+
+  function refresh() {
+    post('/api/admin/overview').then(function (res) {
+      if (res.status === 403) { lockUp('That key stopped working — the server may have restarted.'); return; }
+      if (res.data.error) { status(res.data.error, 'err'); return; }
+      render(res.data);
+    }).catch(function () { status('Lost the server…', 'err'); });
+  }
+
+  function credit(token, amount) {
+    post('/api/admin/credit', { token: token, amount: amount }).then(function (res) {
+      if (res.status === 403) { lockUp('That key stopped working.'); return; }
+      if (res.data.error) { status(res.data.error, 'err'); return; }
+      status((amount > 0 ? 'Credited ' : 'Docked ') + fmt(Math.abs(amount)) +
+        ' — account now ' + fmt(res.data.cash) + '.', 'good');
+      refresh();
+    });
+  }
+
+  document.addEventListener('click', function (e) {
+    var b = e.target;
+    if (b.classList && b.classList.contains('credit')) {
+      credit(b.dataset.t, Number(b.dataset.a));
+    } else if (b.classList && b.classList.contains('apply')) {
+      var inp = document.querySelector('input.amt[data-for="' + b.dataset.t + '"]');
+      var amt = Math.round(Number(inp && inp.value));
+      if (!amt) { status('Type an amount first (negative to dock).', 'err'); return; }
+      credit(b.dataset.t, amt);
+      if (inp) inp.value = '';
+    }
+  });
+
+  function unlock() {
+    key = $('keyInput').value.trim() || key;
+    if (!key) { $('lockErr').textContent = 'Enter the key from the server console.'; return; }
+    post('/api/admin/overview').then(function (res) {
+      if (res.status === 403) { $('lockErr').textContent = 'Wrong key.'; key = ''; return; }
+      try { localStorage.setItem('t7-admin', key); } catch (e) {}
+      unlocked = true;
+      $('lock').style.display = 'none';
+      $('panel').style.display = 'block';
+      render(res.data);
+      status('The floor is yours.', 'good');
+      refreshTimer = setInterval(refresh, 5000);
+    }).catch(function () { $('lockErr').textContent = 'Server unreachable.'; });
+  }
+
+  $('btnUnlock').addEventListener('click', unlock);
+  $('keyInput').addEventListener('keydown', function (e) { if (e.key === 'Enter') unlock(); });
+  $('btnLockUp').addEventListener('click', function () { lockUp(''); });
+
+  if (key) { $('keyInput').value = key; unlock(); }
+})();
+</script>
+
+</body>
+</html>

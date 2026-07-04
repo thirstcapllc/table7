@@ -1,0 +1,10 @@
+# Table Seven only needs: table-server.js, table.html, vegas-playbook.html,
+# blackjack-trainer.html, package.json, README-DEPLOY.md, Start-TableSeven.cmd.
+# Everything below is unrelated local work — keep it out of the deploy repo.
+cage-data.json
+web/
+recon/
+docker-compose.yml
+node_modules/
+.claude/
+*.log

@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vegas Playbook — Blackjack &amp; Slots</title>
+<style>
+  :root {
+    --felt: #0c1f16;
+    --card: #132b1f;
+    --card2: #0f2419;
+    --gold: #d4af37;
+    --gold-dim: #a8892b;
+    --cream: #f3ecd8;
+    --muted: #9db3a5;
+    --red: #b3452e;
+    --green: #2e7d4f;
+    --blue: #4a5fa5;
+    --line: #234734;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--felt);
+    color: var(--cream);
+    font-family: Georgia, 'Times New Roman', serif;
+    line-height: 1.55;
+  }
+  header {
+    text-align: center;
+    padding: 28px 16px 18px;
+    background: radial-gradient(ellipse at top, #16382a 0%, var(--felt) 70%);
+    border-bottom: 2px solid var(--gold-dim);
+  }
+  header h1 {
+    font-size: 2rem;
+    letter-spacing: 3px;
+    color: var(--gold);
+    text-transform: uppercase;
+  }
+  header p { color: var(--muted); margin-top: 6px; font-style: italic; }
+  nav {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+    padding: 14px 10px;
+    position: sticky;
+    top: 0;
+    background: rgba(12,31,22,0.97);
+    border-bottom: 1px solid var(--line);
+    z-index: 10;
+  }
+  nav button {
+    font-family: inherit;
+    font-size: 0.95rem;
+    padding: 8px 16px;
+    background: var(--card);
+    color: var(--cream);
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    cursor: pointer;
+  }
+  nav button.active {
+    background: var(--gold);
+    color: #1a1a1a;
+    border-color: var(--gold);
+    font-weight: bold;
+  }
+  main { max-width: 980px; margin: 0 auto; padding: 24px 16px 60px; }
+  section.tab { display: none; }
+  section.tab.active { display: block; }
+  h2 {
+    color: var(--gold);
+    font-size: 1.5rem;
+    margin: 26px 0 12px;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 6px;
+  }
+  h3 { color: var(--gold-dim); margin: 20px 0 8px; font-size: 1.15rem; }
+  p, li { margin-bottom: 8px; }
+  ul, ol { padding-left: 24px; margin-bottom: 14px; }
+  .callout {
+    background: var(--card);
+    border-left: 4px solid var(--gold);
+    padding: 14px 16px;
+    border-radius: 0 8px 8px 0;
+    margin: 16px 0;
+  }
+  .callout.warn { border-left-color: var(--red); }
+  .callout.win { border-left-color: var(--green); }
+  .callout strong:first-child { color: var(--gold); }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 12px 0 20px;
+    font-size: 0.92rem;
+  }
+  .plainTable th, .plainTable td {
+    border: 1px solid var(--line);
+    padding: 8px 10px;
+    text-align: left;
+  }
+  .plainTable th { background: var(--card2); color: var(--gold); }
+  .plainTable tr:nth-child(even) td { background: rgba(255,255,255,0.03); }
+  .scrollwrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .strat { min-width: 560px; text-align: center; }
+  .strat th {
+    background: var(--card2);
+    color: var(--gold);
+    border: 1px solid var(--line);
+    padding: 6px 4px;
+    font-size: 0.85rem;
+  }
+  .strat td {
+    border: 1px solid rgba(0,0,0,0.4);
+    padding: 6px 2px;
+    font-weight: bold;
+    font-family: Verdana, sans-serif;
+    font-size: 0.8rem;
+    color: #fff;
+    min-width: 34px;
+  }
+  .strat th.rowlab {
+    text-align: left;
+    padding-left: 10px;
+    white-space: nowrap;
+    min-width: 84px;
+  }
+  td.H { background: var(--red); }
+  td.S { background: var(--green); }
+  td.D { background: #b78a2a; color: #1a1a1a; }
+  td.P { background: var(--blue); }
+  .legend { display: flex; flex-wrap: wrap; gap: 10px; margin: 10px 0 4px; }
+  .legend span {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 0.9rem; color: var(--muted);
+  }
+  .chip {
+    display: inline-block; width: 22px; height: 22px; border-radius: 4px;
+    text-align: center; line-height: 22px; font-weight: bold;
+    font-family: Verdana, sans-serif; font-size: 0.75rem; color: #fff;
+  }
+  .chip.H { background: var(--red); } .chip.S { background: var(--green); }
+  .chip.D { background: #b78a2a; color: #1a1a1a; } .chip.P { background: var(--blue); }
+  .steps { counter-reset: step; list-style: none; padding-left: 0; }
+  .steps li {
+    counter-increment: step;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 12px 14px 12px 56px;
+    margin-bottom: 10px;
+    position: relative;
+  }
+  .steps li::before {
+    content: counter(step);
+    position: absolute; left: 12px; top: 12px;
+    width: 30px; height: 30px; border-radius: 50%;
+    background: var(--gold); color: #1a1a1a;
+    font-weight: bold; text-align: center; line-height: 30px;
+    font-family: Verdana, sans-serif;
+  }
+  .steps li b { color: var(--gold); }
+  .fine { color: var(--muted); font-size: 0.85rem; }
+  footer {
+    text-align: center; padding: 20px; color: var(--muted);
+    font-size: 0.85rem; border-top: 1px solid var(--line);
+  }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 700px) { .grid2 { grid-template-columns: 1fr; } }
+  .panel {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 8px; padding: 14px 16px;
+  }
+  .panel h4 { color: var(--gold); margin-bottom: 6px; }
+  @media print {
+    body { background: #fff; color: #000; }
+    nav, footer { display: none; }
+    section.tab { display: block !important; page-break-before: always; }
+    section.tab:first-of-type { page-break-before: avoid; }
+    .strat td, .chip { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    h2, h3 { color: #000; }
+    .callout, .panel, .steps li { background: #fff; border-color: #999; color: #000; }
+    .plainTable th { background: #eee; color: #000; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>&#9824; Vegas Playbook &#9829;</h1>
+  <p>Blackjack, slots &amp; bankroll — everything on one page</p>
+  <p style="margin-top:8px"><a href="blackjack-trainer.html" style="color:var(--gold); font-style:normal; font-weight:bold;">&#127137; Practice with the Blackjack Trainer &rarr;</a>
+  &nbsp;&middot;&nbsp; <a href="table.html" style="color:var(--gold); font-style:normal; font-weight:bold;">&#127183; Play together at TABLE SEVEN &rarr;</a>
+  <span style="font-size:0.75rem; color:var(--muted); font-style:normal;">(run Start-TableSeven.cmd first)</span></p>
+</header>
+
+<nav>
+  <button class="active" data-tab="plan">Game Plan</button>
+  <button data-tab="steps">Blackjack: Step by Step</button>
+  <button data-tab="chart">Strategy Chart</button>
+  <button data-tab="slots">Slots &amp; Machines</button>
+  <button data-tab="bankroll">Bankroll</button>
+</nav>
+
+<main>
+
+<!-- ============ GAME PLAN ============ -->
+<section class="tab active" id="plan">
+  <h2>The Honest Truth First</h2>
+  <div class="callout warn">
+    <strong>No strategy beats the casino long-term.</strong> Every game has a built-in house
+    edge. Your $300 &rarr; $1,500 last trip was a genuinely hot run — enjoy that memory, but
+    don't expect it to repeat. What strategy <em>can</em> do is shrink the house edge from
+    "brutal" to "tiny," stretch your money into hours of fun, and make sure that when a hot
+    run happens again, you walk away with it instead of giving it back.
+  </div>
+
+  <h2>House Edge: Where Your Money Actually Goes</h2>
+  <div class="scrollwrap">
+  <table class="plainTable">
+    <tr><th>Game</th><th>House Edge</th><th>Verdict</th></tr>
+    <tr><td>Blackjack, 3:2 payout, basic strategy</td><td>~0.5%</td><td>&#11088; Best table game in the building</td></tr>
+    <tr><td>Video poker (9/6 Jacks or Better, good play)</td><td>~0.5%</td><td>&#11088; Best "machine" by far</td></tr>
+    <tr><td>Baccarat (banker bet)</td><td>~1.06%</td><td>Good, zero skill needed</td></tr>
+    <tr><td>Craps (pass line + odds)</td><td>~1.4% or less</td><td>Good, fun table energy</td></tr>
+    <tr><td>Blackjack at a 6:5 table</td><td>~2%</td><td>&#10060; Avoid — same game, 4x worse</td></tr>
+    <tr><td>Roulette (double zero)</td><td>5.26%</td><td>Meh</td></tr>
+    <tr><td>Dollar slots</td><td>~5–7%</td><td>Meh</td></tr>
+    <tr><td>Penny slots (the flashy ones)</td><td>~10–12%</td><td>&#10060; Worst odds on the floor</td></tr>
+    <tr><td>Blackjack side bets (Lucky Ladies, etc.)</td><td>2–25%</td><td>&#10060; Never</td></tr>
+  </table>
+  </div>
+
+  <h2>The 6 Rules That Are the Actual "Strategy"</h2>
+  <ol class="steps">
+    <li><b>Only play 3:2 blackjack.</b> Look at the felt — it must say "Blackjack pays 3 to 2."
+      If it says 6:5, walk away. This one habit matters more than anything else on this page.</li>
+    <li><b>Play perfect basic strategy.</b> Use the chart tab. Never guess, never play hunches,
+      never copy the guy next to you. Casinos allow printed strategy cards at the table
+      (phones are NOT allowed) — print the chart tab and bring it.</li>
+    <li><b>Never take insurance, never play side bets.</b> When the dealer shows an Ace and asks
+      "insurance?" the answer is always no.</li>
+    <li><b>Set a loss limit and a win-lock per session</b> before you sit down (details in Bankroll tab).
+      Last trip you won because you stopped. That's the skill — keep it.</li>
+    <li><b>Always use a players card</b> (free to sign up at any casino desk). It doesn't change
+      the odds, but it earns free play, meals, and room offers. You're leaving money on the
+      table without it.</li>
+    <li><b>Slow down.</b> The house edge taxes every bet, so fewer hands per hour = losing slower.
+      Full tables are better than heads-up vs. the dealer. Sip, chat, enjoy.</li>
+  </ol>
+</section>
+
+<!-- ============ BLACKJACK STEPS ============ -->
+<section class="tab" id="steps">
+  <h2>Blackjack: The Goal</h2>
+  <p>Get a hand total closer to <strong>21</strong> than the dealer without going over ("busting").
+     You're only playing against the dealer, never the other players.</p>
+  <div class="grid2">
+    <div class="panel">
+      <h4>Card values</h4>
+      <ul>
+        <li>2–10 = face value</li>
+        <li>Jack, Queen, King = 10</li>
+        <li>Ace = 1 <em>or</em> 11, whichever helps you (a hand with an Ace counting as 11 is called "soft")</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <h4>Key payouts</h4>
+      <ul>
+        <li>Win a hand: paid 1:1 (bet $10, win $10)</li>
+        <li>"Blackjack" (Ace + 10-card on your first two cards): paid 3:2 (bet $10, win $15)</li>
+        <li>Tie ("push"): keep your bet, nobody wins</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>A Hand, From Sitting Down to Cashing Out</h2>
+  <ol class="steps">
+    <li><b>Pick the right table.</b> Check the small sign: minimum bet ($5, $10, $15...) and
+      "Blackjack pays 3 to 2." Bonus points if the sign or dealer says the dealer
+      <em>stands</em> on soft 17.</li>
+    <li><b>Buy in.</b> Sit down, wait for the current hand to finish, then lay your cash flat on
+      the felt — <em>never hand it to the dealer directly</em>. Say "changing $100." The dealer
+      converts it to chips.</li>
+    <li><b>Place your bet.</b> Put chips in the betting circle in front of you before the deal.
+      Once cards are out, never touch your bet.</li>
+    <li><b>The deal.</b> Everyone gets 2 cards face-up. The dealer gets one face-up ("upcard") and
+      one face-down. In these face-up "shoe" games, <em>never touch your cards</em>.</li>
+    <li><b>Insurance offer (decline it).</b> If the dealer shows an Ace, they'll offer insurance.
+      Wave it off or say "no thanks." If the dealer has blackjack, the hand ends; you lose your
+      bet (push if you also have blackjack).</li>
+    <li><b>Your turn — pick one action</b> (check the Strategy Chart tab):
+      <ul>
+        <li><b>Hit</b> — take another card. Signal: tap the felt behind your cards.</li>
+        <li><b>Stand</b> — keep what you have. Signal: wave your hand flat over the cards.</li>
+        <li><b>Double down</b> — double your bet, take exactly one more card. Signal: put a
+          matching stack of chips <em>next to</em> (not on top of) your bet, hold up one finger.</li>
+        <li><b>Split</b> — if your two cards match (e.g., 8-8), put up a second equal bet and play
+          them as two separate hands. Signal: matching chips beside the bet, two fingers in a "V".</li>
+        <li><b>Surrender</b> (only some tables) — give up the hand, get half your bet back. Say
+          "surrender" out loud and draw a line behind your bet with your finger.</li>
+      </ul>
+      Hand signals are required — cameras need to see your decision. If you go over 21 you bust
+      and lose immediately.</li>
+    <li><b>Dealer plays.</b> The dealer flips their hole card and follows fixed rules: hit until
+      reaching 17 or more, then stop. No decisions, no reading you — it's pure procedure. If the
+      dealer busts, every player still standing wins.</li>
+    <li><b>Payouts.</b> Beat the dealer: paid even money next to your bet. Blackjack: 3:2. Tie:
+      push. Then the next hand starts — bet again or sit one out (just say "I'll sit this one out").</li>
+    <li><b>Leaving.</b> Push your chips forward and ask the dealer to "color up" (exchange small
+      chips for big ones). Take the big chips to the cashier's cage to turn them into cash.
+      Chips from one casino generally can't be cashed at another.</li>
+  </ol>
+
+  <h2>Etiquette (So You Look Like a Regular)</h2>
+  <div class="grid2">
+    <div class="panel">
+      <h4>Do</h4>
+      <ul>
+        <li>Use hand signals for every decision</li>
+        <li>Tip the dealer now and then — easiest way: place a small side bet "for the dealer" in front of your circle</li>
+        <li>Ask the dealer questions! Say "first time at a table, help me out" — most dealers are happy to coach at a quiet, low-limit table</li>
+        <li>Wait for the shuffle to join a game if the table asks for it</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <h4>Don't</h4>
+      <ul>
+        <li>Touch your cards (in face-up games) or your bet after the deal</li>
+        <li>Use your phone at the table — printed strategy cards are fine, phones are not</li>
+        <li>Hand cash directly to the dealer — lay it on the felt</li>
+        <li>Blame other players for "taking the dealer's bust card" — it's superstition, ignore it</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============ STRATEGY CHART ============ -->
+<section class="tab" id="chart">
+  <h2>Basic Strategy Chart</h2>
+  <p>This is the mathematically best play for every hand vs. every dealer upcard
+     (multi-deck shoe, the standard Vegas game). It's not a guess — it's a solved table.
+     <strong>Print this page and take it to the table</strong> (allowed everywhere; phones are not).</p>
+
+  <div class="callout">
+    <strong>How to read it:</strong> Find your hand on the left, the dealer's upcard across the top.
+    Check in this order: &#9312; Is it a pair? Use the Pairs table. &#9313; Do you have an Ace
+    counting as 11? Use Soft Totals. &#9314; Otherwise use Hard Totals.
+  </div>
+
+  <div class="legend">
+    <span><span class="chip H">H</span> Hit</span>
+    <span><span class="chip S">S</span> Stand</span>
+    <span><span class="chip D">D</span> Double (if not allowed: hit &mdash; except soft 18: stand)</span>
+    <span><span class="chip P">P</span> Split</span>
+  </div>
+
+  <h3>Hard Totals (no Ace, or Ace counted as 1)</h3>
+  <div class="scrollwrap"><div id="hardChart"></div></div>
+
+  <h3>Soft Totals (Ace counted as 11)</h3>
+  <div class="scrollwrap"><div id="softChart"></div></div>
+
+  <h3>Pairs</h3>
+  <div class="scrollwrap"><div id="pairChart"></div></div>
+
+  <p class="fine">* If the table offers surrender: surrender 16 vs 9, 10, or Ace, and 15 vs 10
+     (otherwise hit). &dagger; If the dealer <em>hits</em> soft 17 (common in Vegas — the felt
+     will say): also double 11 vs Ace, double A,7 vs 2, and double A,8 vs 6. These tweaks are
+     worth pennies — don't stress them.</p>
+
+  <h2>The "Never Forget" Short List</h2>
+  <div class="grid2">
+    <div class="panel">
+      <h4>Always</h4>
+      <ul>
+        <li>Split Aces and 8s</li>
+        <li>Double 11 (vs everything but an Ace)</li>
+        <li>Stand on hard 17+</li>
+        <li>Stand on 13–16 when the dealer shows 2–6 (let the dealer bust)</li>
+        <li>Hit soft 17 (A,6) — never stand on it</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <h4>Never</h4>
+      <ul>
+        <li>Split 10s or 5s</li>
+        <li>Take insurance or "even money"</li>
+        <li>Play any side bet</li>
+        <li>Stand on 12–16 vs dealer 7 or higher — you must hit, even though it feels scary</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout win">
+    <strong>Why hit 16 vs 10?</strong> It feels wrong because you'll often bust. But the dealer's
+    10 makes them a huge favorite to reach 17+, so standing loses <em>more often</em> than hitting.
+    Basic strategy is full of plays that feel wrong and are right. Trust the chart over your gut,
+    every single time.
+  </div>
+</section>
+
+<!-- ============ SLOTS ============ -->
+<section class="tab" id="slots">
+  <h2>How Slots Really Work</h2>
+  <p>Every modern slot uses a random number generator. There are no hot machines, no "due"
+     jackpots, and nothing you do (bet timing, stopping the reels, rubbing the screen) changes
+     the outcome. The only number that matters is <strong>RTP (return to player)</strong> — the
+     percentage the machine pays back over millions of spins. You can't see a machine's exact
+     RTP, but the patterns below are consistent in Nevada Gaming Control Board revenue reports
+     year after year.</p>
+
+  <h2>Which Machines Pay the Most</h2>
+  <div class="scrollwrap">
+  <table class="plainTable">
+    <tr><th>Machine type</th><th>Typical return</th><th>Notes</th></tr>
+    <tr><td>&#11088; Video poker — 9/6 Jacks or Better</td><td>99.5% (with the strategy card)</td><td>The best machine in any casino. "9/6" means the paytable shows 9 for a full house and 6 for a flush at 1 coin — check the screen before playing.</td></tr>
+    <tr><td>Video poker — lesser paytables (8/5, 7/5)</td><td>96–98%</td><td>Same game, worse paytable. Always read the paytable.</td></tr>
+    <tr><td>$5+ reel slots</td><td>~95%</td><td>Higher denomination = higher return, reliably.</td></tr>
+    <tr><td>Dollar slots</td><td>~93–95%</td><td>Decent middle ground.</td></tr>
+    <tr><td>Quarter slots</td><td>~91–93%</td><td></td></tr>
+    <tr><td>Penny video slots (the big flashy licensed ones)</td><td>~88–90%</td><td>Worst return in the casino — the fancy screens and bonus wheels are paid for by the paytable.</td></tr>
+    <tr><td>Airport / gas station machines</td><td>~85–88%</td><td>Never. Captive-audience pricing.</td></tr>
+  </table>
+  </div>
+
+  <div class="callout">
+    <strong>The counterintuitive rule:</strong> one $1 spin on a dollar machine beats a $1 spin
+    spread across 40 lines of a penny machine — same money, meaningfully better return. If you
+    love the penny-slot bonus rounds anyway, that's fine! Just know you're paying extra for the
+    entertainment, and size your bets accordingly.
+  </div>
+
+  <h2>Where the Loose(r) Machines Are</h2>
+  <p>Location matters more than machine choice. Strip casinos return roughly 92% overall;
+     downtown and locals casinos run 94–95%+ because they compete for repeat local customers.
+     Since you can drive:</p>
+  <div class="scrollwrap">
+  <table class="plainTable">
+    <tr><th>Spot</th><th>Drive from the Strip</th><th>Why go</th></tr>
+    <tr><td><strong>El Cortez</strong> (downtown)</td><td>~10 min</td><td>Famous for the loosest slots in Vegas, real coin-payout machines, cheap 3:2 $5–$10 blackjack. Old-school and genuinely fun.</td></tr>
+    <tr><td><strong>Fremont Street casinos</strong> (Fremont, Four Queens, Binion's, Circa)</td><td>~10 min</td><td>Better slot returns than the Strip, low table minimums, great 3:2 blackjack availability, and the light show is free.</td></tr>
+    <tr><td><strong>Palace Station</strong></td><td>~7 min</td><td>Locals casino = better machines, good video poker inventory, cheap food.</td></tr>
+    <tr><td><strong>Sam's Town / Boulder Station</strong> (Boulder Hwy)</td><td>~20 min</td><td>Where locals play. Some of the best video poker paytables in town.</td></tr>
+    <tr><td><strong>Your own hotel casino</strong></td><td>You're home</td><td>Fine for convenience — sign up for the players card wherever you're staying; hotel guests get the best offers.</td></tr>
+  </table>
+  </div>
+
+  <h2>Slot Session Rules</h2>
+  <ol class="steps">
+    <li><b>Card in, every time.</b> Insert your players card before every session — comps are
+      based on tracked play.</li>
+    <li><b>Pick denomination by bankroll, not excitement.</b> Playing $20 of fun money? Penny
+      machine, minimum lines. Playing $100+? Move up in denomination instead of betting max on pennies.</li>
+    <li><b>Try video poker for one session.</b> 9/6 Jacks or Better with a $2 strategy card from
+      the gift shop is the closest a machine gets to a fair game — and it feels like a skill game,
+      because it is one.</li>
+    <li><b>Lock the jackpot.</b> Any single win over ~5x your session budget: cash the ticket
+      immediately, put the money in your pocket, take a walk. That's how last trip's $1,500 happened.</li>
+    <li><b>Never chase.</b> A machine that "owes you" doesn't exist. When the session budget's
+      gone, the session is over.</li>
+  </ol>
+</section>
+
+<!-- ============ BANKROLL ============ -->
+<section class="tab" id="bankroll">
+  <h2>The $300 Battle Plan (scale to whatever you bring)</h2>
+  <p>The bankroll plan matters more than any strategy chart. It's the difference between
+     "played all weekend, great time" and "broke by Friday midnight."</p>
+
+  <ol class="steps">
+    <li><b>Split the bankroll into sessions.</b> $300 = three $100 sessions (or four $75). One
+      envelope per session. When an envelope is empty, that session is over — no reloading from
+      the ATM, no dipping into tomorrow's envelope. Casino ATMs charge $8+ per withdrawal for a reason.</li>
+    <li><b>Size bets to the envelope.</b> At blackjack you want ~20 bets per buy-in: $100 &rarr;
+      a $5 table. If minimums near you are $15+, that's the signal to drive downtown, not to
+      play shorter.</li>
+    <li><b>Set a win-lock before you sit.</b> Simple version: if a session envelope doubles
+      ($100 &rarr; $200), pocket the original $100 immediately and play on with winnings only.
+      You are now literally unable to lose money that session.</li>
+    <li><b>Rat-hole big wins.</b> Up big like last trip? Take half off the table, walk to the
+      cage, cash it, and physically separate it (hotel safe is ideal). Money in the safe has a
+      100% return rate — best odds in the building.</li>
+    <li><b>Time limits too.</b> Fatigue and free drinks wreck discipline after ~90 minutes.
+      Set a phone alarm per session. Also: the free drinks aren't free — tip $1–2 each, and
+      alternate with water. Every bad gambling decision in history involved drink #4.</li>
+    <li><b>Decide the "trip win" number now.</b> Example: "If I'm ever up $1,000+ on the trip,
+      the gambling portion of the trip is complete." Write it down. Future-you at a hot table
+      will need past-you's note.</li>
+  </ol>
+
+  <div class="callout win">
+    <strong>The real win condition:</strong> you spent your entertainment budget, played the
+    best-odds games in the building, had a blast, and any hot streak went home in your pocket
+    instead of back across the felt. Everything else is luck — and you've had good luck before.
+  </div>
+</section>
+
+</main>
+
+<footer>
+  Built for your Vegas trip &middot; If it stops being fun, stop — 1-800-GAMBLER &middot;
+  Print this page for a table-legal strategy card
+</footer>
+
+<script>
+(function () {
+  // Tabs
+  var buttons = document.querySelectorAll('nav button');
+  buttons.forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      buttons.forEach(function (b) { b.classList.remove('active'); });
+      document.querySelectorAll('section.tab').forEach(function (s) { s.classList.remove('active'); });
+      btn.classList.add('active');
+      document.getElementById(btn.dataset.tab).classList.add('active');
+      window.scrollTo(0, 0);
+    });
+  });
+
+  // Basic strategy data: multi-deck shoe, double-after-split allowed.
+  // Codes: H hit, S stand, D double, P split. '*' / '†' footnoted in the page text.
+  var cols = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'A'];
+
+  var hard = [
+    ['8 or less', ['H','H','H','H','H','H','H','H','H','H']],
+    ['9',         ['H','D','D','D','D','H','H','H','H','H']],
+    ['10',        ['D','D','D','D','D','D','D','D','H','H']],
+    ['11',        ['D','D','D','D','D','D','D','D','D','H†']],
+    ['12',        ['H','H','S','S','S','H','H','H','H','H']],
+    ['13',        ['S','S','S','S','S','H','H','H','H','H']],
+    ['14',        ['S','S','S','S','S','H','H','H','H','H']],
+    ['15',        ['S','S','S','S','S','H','H','H','H*','H']],
+    ['16',        ['S','S','S','S','S','H','H','H*','H*','H*']],
+    ['17+',       ['S','S','S','S','S','S','S','S','S','S']]
+  ];
+
+  var soft = [
+    ['A,2 (13)', ['H','H','H','D','D','H','H','H','H','H']],
+    ['A,3 (14)', ['H','H','H','D','D','H','H','H','H','H']],
+    ['A,4 (15)', ['H','H','D','D','D','H','H','H','H','H']],
+    ['A,5 (16)', ['H','H','D','D','D','H','H','H','H','H']],
+    ['A,6 (17)', ['H','D','D','D','D','H','H','H','H','H']],
+    ['A,7 (18)', ['S†','D','D','D','D','S','S','H','H','H']],
+    ['A,8 (19)', ['S','S','S','S','S†','S','S','S','S','S']],
+    ['A,9 (20)', ['S','S','S','S','S','S','S','S','S','S']]
+  ];
+
+  var pairs = [
+    ['A,A',   ['P','P','P','P','P','P','P','P','P','P']],
+    ['10,10', ['S','S','S','S','S','S','S','S','S','S']],
+    ['9,9',   ['P','P','P','P','P','S','P','P','S','S']],
+    ['8,8',   ['P','P','P','P','P','P','P','P','P','P']],
+    ['7,7',   ['P','P','P','P','P','P','H','H','H','H']],
+    ['6,6',   ['P','P','P','P','P','H','H','H','H','H']],
+    ['5,5',   ['D','D','D','D','D','D','D','D','H','H']],
+    ['4,4',   ['H','H','H','P','P','H','H','H','H','H']],
+    ['3,3',   ['P','P','P','P','P','P','H','H','H','H']],
+    ['2,2',   ['P','P','P','P','P','P','H','H','H','H']]
+  ];
+
+  function buildTable(rows, containerId, cornerLabel) {
+    var html = '<table class="strat"><tr><th class="rowlab">' + cornerLabel + ' \\ Dealer</th>';
+    cols.forEach(function (c) { html += '<th>' + c + '</th>'; });
+    html += '</tr>';
+    rows.forEach(function (row) {
+      html += '<tr><th class="rowlab">' + row[0] + '</th>';
+      row[1].forEach(function (cell) {
+        html += '<td class="' + cell.charAt(0) + '">' + cell + '</td>';
+      });
+      html += '</tr>';
+    });
+    html += '</table>';
+    document.getElementById(containerId).innerHTML = html;
+  }
+
+  buildTable(hard, 'hardChart', 'You');
+  buildTable(soft, 'softChart', 'You');
+  buildTable(pairs, 'pairChart', 'You');
+})();
+</script>
+
+</body>
+</html>
