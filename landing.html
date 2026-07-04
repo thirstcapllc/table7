@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TABLE SEVEN — Private Online Blackjack Casino</title>
+<meta name="description" content="TABLE SEVEN — a private online blackjack casino for you and your friends. Live multiplayer, bots, your own Vegas rules, a built-in strategy coach. Free, fake money, real bragging rights.">
+<style>
+  :root {
+    --felt: #0a1b13; --felt2: #0c2118; --card: #132b1f; --card2: #0f2419;
+    --gold: #d4af37; --gold-dim: #a8892b; --cream: #f3ecd8; --muted: #9db3a5;
+    --red: #b3452e; --green: #2e7d4f; --blue: #4a5fa5; --line: #234734;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background:
+      radial-gradient(ellipse 80% 50% at 50% -10%, #1c4a34 0%, transparent 60%),
+      radial-gradient(ellipse at 50% 120%, #14382730 0%, transparent 60%),
+      var(--felt);
+    color: var(--cream); font-family: Georgia, 'Times New Roman', serif; min-height: 100vh;
+    overflow-x: hidden;
+  }
+  a { color: var(--gold); text-decoration: none; }
+  .wrap { max-width: 1000px; margin: 0 auto; padding: 0 20px; }
+
+  /* top bar */
+  .topbar { display: flex; justify-content: space-between; align-items: center; padding: 18px 24px; }
+  .brand { font-size: 1.1rem; letter-spacing: 4px; color: var(--gold); font-weight: bold; }
+  .topnav a { color: var(--muted); font-size: 0.85rem; margin-left: 18px; letter-spacing: 1px; }
+  .topnav a:hover { color: var(--gold); }
+
+  /* hero */
+  .hero { text-align: center; padding: 40px 20px 20px; position: relative; }
+  .suits { color: var(--gold-dim); letter-spacing: 10px; font-size: 1.3rem; margin-bottom: 10px; opacity: 0.8; }
+  .hero h1 {
+    font-size: clamp(2.6rem, 9vw, 5.2rem); letter-spacing: 8px; color: var(--gold);
+    text-shadow: 0 2px 20px rgba(212,175,55,0.35), 0 0 2px rgba(212,175,55,0.6);
+    line-height: 1.05;
+  }
+  .hero .tag { color: var(--cream); font-size: clamp(1rem, 3vw, 1.35rem); margin: 16px auto 6px; max-width: 620px; font-style: italic; }
+  .hero .sub { color: var(--muted); font-size: 0.9rem; letter-spacing: 1px; }
+
+  .cta { display: inline-flex; align-items: center; gap: 10px; margin-top: 26px;
+    background: linear-gradient(180deg, #e8c65a, #c49a2a); color: #1a1408; font-family: Verdana, sans-serif;
+    font-weight: bold; font-size: 1.1rem; letter-spacing: 1px; padding: 15px 34px; border-radius: 40px;
+    box-shadow: 0 8px 24px rgba(212,175,55,0.35), inset 0 1px 0 rgba(255,255,255,0.4);
+    border: 1px solid #f0d778; transition: transform 0.15s, box-shadow 0.15s; }
+  .cta:hover { transform: translateY(-2px); box-shadow: 0 12px 30px rgba(212,175,55,0.5); }
+  .cta .arrow { font-size: 1.2rem; }
+  .cta-note { display: block; color: var(--muted); font-size: 0.8rem; margin-top: 12px; letter-spacing: 1px; }
+
+  /* fanned cards */
+  .fan { position: relative; height: 190px; margin: 30px auto 0; width: 320px; }
+  .fcard {
+    position: absolute; left: 50%; top: 20px; width: 92px; height: 130px; border-radius: 9px;
+    background: linear-gradient(160deg, #ffffff, #f0e9db); color: #1a1a1a;
+    box-shadow: 0 10px 24px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(0,0,0,0.08);
+    transform-origin: bottom center; font-family: 'Trebuchet MS', Verdana, sans-serif;
+    animation: dealcard 0.7s cubic-bezier(0.2, 0.8, 0.3, 1) backwards;
+  }
+  .fcard .r { position: absolute; top: 7px; left: 9px; font-weight: bold; font-size: 1.15rem; line-height: 1; text-align: center; }
+  .fcard .p { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 2.6rem; }
+  .fcard.red { color: #c0392b; }
+  .fcard:nth-child(1) { transform: translateX(-50%) rotate(-24deg) translateY(6px); animation-delay: 0.05s; }
+  .fcard:nth-child(2) { transform: translateX(-50%) rotate(-12deg) translateY(-4px); animation-delay: 0.15s; }
+  .fcard:nth-child(3) { transform: translateX(-50%) rotate(0deg) translateY(-10px); animation-delay: 0.25s; z-index: 3; }
+  .fcard:nth-child(4) { transform: translateX(-50%) rotate(12deg) translateY(-4px); animation-delay: 0.35s; }
+  .fcard:nth-child(5) { transform: translateX(-50%) rotate(24deg) translateY(6px); animation-delay: 0.45s; }
+  @keyframes dealcard { from { transform: translateX(-50%) translateY(-160px) rotate(0deg); opacity: 0; } }
+
+  .chips { text-align: center; margin-top: 6px; }
+  .chip { display: inline-block; width: 34px; height: 34px; border-radius: 50%; margin: 0 -6px;
+    border: 3px dashed rgba(255,255,255,0.7); box-shadow: 0 3px 6px rgba(0,0,0,0.4); vertical-align: middle; }
+  .chip.a { background: #b3452e; } .chip.b { background: #2e7d4f; } .chip.c { background: #232323; } .chip.d { background: #6a3fa0; }
+
+  /* sections */
+  section { padding: 46px 0; }
+  .sec-title { text-align: center; color: var(--gold); font-size: 1.6rem; letter-spacing: 3px; margin-bottom: 6px; }
+  .sec-sub { text-align: center; color: var(--muted); font-style: italic; margin-bottom: 30px; }
+
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .feat { background: linear-gradient(180deg, rgba(19,43,31,0.9), rgba(15,36,25,0.9));
+    border: 1px solid var(--line); border-radius: 14px; padding: 22px 20px; transition: transform 0.15s, border-color 0.15s; }
+  .feat:hover { transform: translateY(-3px); border-color: var(--gold-dim); }
+  .feat .ico { font-size: 1.8rem; margin-bottom: 10px; }
+  .feat h3 { color: var(--gold); font-size: 1.1rem; margin-bottom: 6px; letter-spacing: 1px; }
+  .feat p { color: var(--muted); font-size: 0.9rem; line-height: 1.5; }
+
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; counter-reset: step; }
+  .step { text-align: center; padding: 10px; }
+  .step .num { counter-increment: step; width: 46px; height: 46px; border-radius: 50%; margin: 0 auto 12px;
+    background: var(--gold); color: #1a1408; font-family: Verdana, sans-serif; font-weight: bold; font-size: 1.3rem;
+    display: flex; align-items: center; justify-content: center; }
+  .step .num::before { content: counter(step); }
+  .step h4 { color: var(--cream); margin-bottom: 6px; font-size: 1.05rem; }
+  .step p { color: var(--muted); font-size: 0.88rem; line-height: 1.5; }
+
+  .band { background: linear-gradient(180deg, rgba(20,58,39,0.5), rgba(10,27,19,0.2));
+    border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); text-align: center; }
+  .band .cta { margin-top: 4px; }
+
+  footer { text-align: center; padding: 30px 20px 40px; color: var(--muted); font-size: 0.8rem; line-height: 1.7; }
+  footer .disc { max-width: 640px; margin: 0 auto; opacity: 0.8; }
+  footer a { color: var(--gold-dim); }
+
+  @media (max-width: 720px) {
+    .grid, .steps { grid-template-columns: 1fr; }
+    .topnav a { margin-left: 12px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">&#9824; TABLE SEVEN</div>
+  <div class="topnav">
+    <a href="#features">Features</a>
+    <a href="/vegas-playbook.html">Playbook</a>
+    <a href="/blackjack-trainer.html">Trainer</a>
+    <a href="/play">Play</a>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <div class="hero">
+    <div class="suits">&#9824; &#9829; &#9830; &#9827;</div>
+    <h1>TABLE&nbsp;SEVEN</h1>
+    <p class="tag">A private online blackjack casino for you and your friends.</p>
+    <p class="sub">Live multiplayer &middot; your own Vegas rules &middot; a coach that has your back</p>
+
+    <div class="fan" aria-hidden="true">
+      <div class="fcard red"><span class="r">A<br>&#9829;</span><span class="p">&#9829;</span></div>
+      <div class="fcard"><span class="r">K<br>&#9824;</span><span class="p">&#9824;</span></div>
+      <div class="fcard red"><span class="r">7<br>&#9830;</span><span class="p">&#9830;</span></div>
+      <div class="fcard"><span class="r">J<br>&#9827;</span><span class="p">&#9827;</span></div>
+      <div class="fcard red"><span class="r">A<br>&#9830;</span><span class="p">&#9830;</span></div>
+    </div>
+    <div class="chips">
+      <span class="chip a"></span><span class="chip b"></span><span class="chip c"></span><span class="chip d"></span>
+    </div>
+
+    <div style="margin-top:22px">
+      <a class="cta" href="/play">Enter the Casino <span class="arrow">&#8594;</span></a>
+      <span class="cta-note">Free to play &middot; fake money &middot; real bragging rights</span>
+    </div>
+  </div>
+
+  <section id="features">
+    <h2 class="sec-title">EVERYTHING BUT THE CARPET SMELL</h2>
+    <p class="sec-sub">A real blackjack pit, run from your browser</p>
+    <div class="grid">
+      <div class="feat"><div class="ico">&#127183;</div><h3>Live Multiplayer</h3>
+        <p>Deal your friends in at the same table over websockets — everyone sees every card in real time, wherever they are.</p></div>
+      <div class="feat"><div class="ico">&#129302;</div><h3>Play with Bots</h3>
+        <p>Empty seats? The host drops in bots — a "book" bot that plays flawless basic strategy, or a "loose" bot that plays like your uncle at 2am.</p></div>
+      <div class="feat"><div class="ico">&#9881;&#65039;</div><h3>Your House, Your Rules</h3>
+        <p>Set the table: blackjack pays 3:2 or 6:5, one to eight decks, dealer hits or stands soft 17, double after split, late surrender.</p></div>
+      <div class="feat"><div class="ico">&#127974;</div><h3>The Cage</h3>
+        <p>Buy chips in, color up when you leave — your bankroll is banked and waits for you. A Player # + PIN gets you back in from any device.</p></div>
+      <div class="feat"><div class="ico">&#127891;</div><h3>Built-in Coach</h3>
+        <p>A strategy coach watches your seat, calls out every off-book move, and tells you why — so you actually get better while you play.</p></div>
+      <div class="feat"><div class="ico">&#128274;</div><h3>Public or Private</h3>
+        <p>List your table in the lobby for anyone to join, or keep it private and share the code only with your crew.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2 class="sec-title">SIT DOWN IN THREE STEPS</h2>
+    <p class="sec-sub">No download, no sign-up, no chips of real value harmed</p>
+    <div class="steps">
+      <div class="step"><div class="num"></div><h4>Grab chips at the cage</h4><p>Every new player is staked $1,000 in play money. Choose your buy-in and you’re holding chips.</p></div>
+      <div class="step"><div class="num"></div><h4>Create or join a table</h4><p>Open your own table with your rules, or jump into any open table from the lobby.</p></div>
+      <div class="step"><div class="num"></div><h4>Deal &amp; play</h4><p>Share the link, add bots, and play real blackjack — splits, doubles, insurance and all.</p></div>
+    </div>
+  </section>
+
+  <section class="band">
+    <div class="wrap">
+      <h2 class="sec-title">READY TO PLAY?</h2>
+      <p class="sec-sub">The felt is warm and the shoe is fresh.</p>
+      <a class="cta" href="/play">Enter the Casino <span class="arrow">&#8594;</span></a>
+    </div>
+  </section>
+
+</div>
+
+<footer>
+  <p class="disc">
+    TABLE SEVEN is a free, for-fun blackjack game played with virtual chips that have <b>no cash value</b>.
+    There are no real-money wagers, purchases, or payouts. Not affiliated with any real casino.
+    If gambling stops being fun, take a break — 1-800-GAMBLER.
+  </p>
+  <p style="margin-top:14px">&#9824; TABLE SEVEN &middot; <a href="/play">Play</a> &middot;
+    <a href="/vegas-playbook.html">Playbook</a> &middot; <a href="/blackjack-trainer.html">Solo Trainer</a></p>
+</footer>
+
+<script>
+  // Old share links pointed at the root (/?t=CODE). Forward them into the game.
+  (function () {
+    var params = new URLSearchParams(location.search);
+    if (params.get('t')) location.replace('/play' + location.search);
+  })();
+</script>
+
+</body>
+</html>

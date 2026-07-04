@@ -1,8 +1,10 @@
 # TABLE SEVEN — deploy guide
 
 Private multiplayer blackjack with a basic-strategy coach. Zero dependencies —
-one Node server (`table-server.js`) serves the live table (`/`), the solo
-trainer (`/blackjack-trainer.html`), and the Vegas playbook (`/vegas-playbook.html`).
+one Node server (`table-server.js`) serves the landing page (`/`), the live
+table (`/play`), the solo trainer (`/blackjack-trainer.html`), and the Vegas
+playbook (`/vegas-playbook.html`). Old share links to `/?t=CODE` auto-forward
+into `/play?t=CODE`.
 
 Every game lives at a table code (share link like `/?t=K7Q4`). Public tables
 show up in the lobby for anyone to join; private ones are join-by-code only, so
@@ -82,5 +84,5 @@ credit or dock anyone's cage cash, and delete accounts. It's protected by a key:
   balances survive if the file does; everyone just rejoins).
 - Tables close themselves after ~20 minutes with no humans around; max 50 tables
   at once; up to 6 seats per table (players + bots).
-- Only the five game pages are ever served — nothing else in the repo/folder
-  is reachable from the internet.
+- Only the game pages are ever served (landing, `/play`, playbook, trainer,
+  admin) — nothing else in the repo/folder is reachable from the internet.

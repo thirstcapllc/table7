@@ -203,7 +203,7 @@
 <header>
   <h1>&#9824; TABLE SEVEN &#9829;</h1>
   <p>the live blackjack casino &middot;
-     <a href="vegas-playbook.html">Playbook</a> &middot; <a href="blackjack-trainer.html">Solo trainer</a></p>
+     <a href="/">Home</a> &middot; <a href="vegas-playbook.html">Playbook</a> &middot; <a href="blackjack-trainer.html">Solo trainer</a></p>
 </header>
 
 <!-- ===== LOBBY ===== -->
@@ -612,7 +612,7 @@ var BJ = (function () {
       if (typeof res.cash === 'number') cageCash = res.cash;
       try { localStorage.setItem('t7-id', JSON.stringify({ playerId: myId, name: name, room: room })); } catch (e) {}
       try { localStorage.setItem('t7-token', token); } catch (e) {}
-      try { history.replaceState(null, '', '/?t=' + room); } catch (e) {}
+      try { history.replaceState(null, '', '/play?t=' + room); } catch (e) {}
       $('joinErr').textContent = '';
       updateCageUI(); updateShareBox(); hideLobby();
       lastVersion = 0; wsConnect();
@@ -687,7 +687,7 @@ var BJ = (function () {
     wsDrop();
     myId = null; room = '';
     try { localStorage.setItem('t7-id', JSON.stringify({ name: myName })); } catch (e) {}
-    try { history.replaceState(null, '', '/'); } catch (e) {}
+    try { history.replaceState(null, '', '/play'); } catch (e) {}
     $('chipRack').innerHTML = ''; $('hostBar').style.display = 'none';
     fetchAccount().then(function () { showLobby(msg || ''); });
   }
@@ -1028,9 +1028,9 @@ var BJ = (function () {
     if (!room) { $('shareBox').innerHTML = ''; return; }
     var isLocal = /^(localhost|127\.)/.test(location.hostname);
     var links;
-    if (!isLocal) links = ['<b>' + location.origin + '/?t=' + room + '</b>'];
-    else if (lanInfo && lanInfo.urls && lanInfo.urls.length) links = lanInfo.urls.map(function (u) { return '<b>' + u + '/?t=' + room + '</b>'; });
-    else links = ['<b>' + location.origin + '/?t=' + room + '</b>'];
+    if (!isLocal) links = ['<b>' + location.origin + '/play?t=' + room + '</b>'];
+    else if (lanInfo && lanInfo.urls && lanInfo.urls.length) links = lanInfo.urls.map(function (u) { return '<b>' + u + '/play?t=' + room + '</b>'; });
+    else links = ['<b>' + location.origin + '/play?t=' + room + '</b>'];
     $('shareBox').innerHTML = 'Invite to this table: ' + links.join(' or ');
   }
   fetch('/api/info').then(function (r) { return r.json(); }).then(function (info) { lanInfo = info; updateShareBox(); }).catch(function () {});

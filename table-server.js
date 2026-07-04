@@ -938,7 +938,10 @@ function cleanName(s) {
 }
 
 const STATIC_FILES = {
-  '/': 'table.html',
+  '/': 'landing.html',
+  '/index.html': 'landing.html',
+  '/play': 'table.html',
+  '/play.html': 'table.html',
   '/table.html': 'table.html',
   '/vegas-playbook.html': 'vegas-playbook.html',
   '/blackjack-trainer.html': 'blackjack-trainer.html',
