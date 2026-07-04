@@ -977,7 +977,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && p.startsWith('/api/')) {
       const body = await readBody(req);
 
-      if (p === '/api/admin/overview' || p === '/api/admin/credit' || p === '/api/admin/delete') {
+      if (p === '/api/admin/overview' || p === '/api/admin/credit' || p === '/api/admin/delete' || p === '/api/admin/resetpin') {
         if (!isAdmin(body.key)) {
           await new Promise(r => setTimeout(r, 300));
           sendJSON(res, 403, { error: 'Wrong pit boss key.' });
@@ -1013,6 +1013,14 @@ const server = http.createServer(async (req, res) => {
           accounts.delete(token);
           saveCageSoon();
           sendJSON(res, 200, { ok: true });
+          return;
+        }
+        if (p === '/api/admin/resetpin') {
+          const acc = accounts.get(String(body.token || ''));
+          if (!acc) { sendJSON(res, 400, { error: 'No such account.' }); return; }
+          acc.pin = newPin();
+          saveCageSoon();
+          sendJSON(res, 200, { ok: true, no: acc.no, pin: acc.pin });
           return;
         }
         const acc = accounts.get(String(body.token || ''));

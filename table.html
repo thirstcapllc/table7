@@ -62,7 +62,7 @@
   }
   .feltart { display: block; width: 84%; margin: -12px auto -28px; pointer-events: none; }
   .feltart text { fill: rgba(230,200,120,0.55); font-family: Georgia, serif; letter-spacing: 5px; }
-  .shoegfx, .discard, .placard, .dealerplate { position: absolute; top: 14px; }
+  .shoegfx, .discard, .placard { position: absolute; top: 14px; }
   .shoegfx { right: 20px; width: 66px; height: 44px; background: linear-gradient(135deg, #1a1a1a, #333);
     border-radius: 6px 14px 4px 4px; box-shadow: 0 3px 6px rgba(0,0,0,0.5), inset 0 1px 1px rgba(255,255,255,0.15); }
   .shoegfx::after { content: ''; position: absolute; left: 7px; top: 7px; width: 40px; height: 30px;
@@ -74,8 +74,6 @@
   .placard { right: 96px; top: 16px; background: linear-gradient(#1c1c1c, #111); border: 1px solid var(--gold-dim);
     border-radius: 6px; padding: 5px 9px; font-size: 0.54rem; letter-spacing: 1px; color: var(--gold);
     text-align: center; line-height: 1.5; transform: rotate(2deg); max-width: 130px; }
-  .dealerplate { left: 50%; top: 4px; transform: translateX(-50%);
-    font-family: Verdana, sans-serif; font-size: 0.62rem; letter-spacing: 3px; color: rgba(243,236,216,0.5); }
   .arealabel { text-align: center; font-size: 0.7rem; color: rgba(243,236,216,0.5);
     text-transform: uppercase; letter-spacing: 2px; margin-bottom: 5px; }
   .cards { display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; min-height: 88px; align-items: center; }
@@ -304,7 +302,6 @@
   <div class="rail">
   <div class="tablefelt" id="felt">
     <div id="signalFlash"></div>
-    <div class="dealerplate">DEALER</div>
     <div class="discard"></div>
     <div class="shoegfx"></div>
     <div class="placard" id="placard">TABLE SEVEN</div>
