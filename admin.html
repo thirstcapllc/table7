@@ -75,7 +75,7 @@
 
     <h2>CAGE ACCOUNTS</h2>
     <table>
-      <thead><tr><th>Player</th><th>Cage Cash</th><th>Comps</th><th>At Table</th><th>Adjust</th></tr></thead>
+      <thead><tr><th>Player</th><th>Player #</th><th>Cage Cash</th><th>Comps</th><th>At Table</th><th>Adjust</th></tr></thead>
       <tbody id="accRows"></tbody>
     </table>
     <p class="muted" style="margin-top:6px">Credits go to the player&rsquo;s cage cash. If they&rsquo;re seated, their
@@ -133,6 +133,7 @@
     d.accounts.forEach(function (a) {
       rows += '<tr>' +
         '<td>' + esc(a.name) + '</td>' +
+        '<td class="tag">' + esc(a.no || '—') + '</td>' +
         '<td class="cash">' + fmt(a.cash) + '</td>' +
         '<td>' + a.comps + '</td>' +
         '<td>' + (a.seated ? '<span class="tag">' + esc(a.seated) + '</span>' : '<span class="muted">—</span>') + '</td>' +
@@ -144,7 +145,7 @@
           '<button class="del" data-t="' + a.token + '" data-n="' + esc(a.name) + '" title="Delete account">🗑</button>' +
         '</td></tr>';
     });
-    $('accRows').innerHTML = rows || '<tr><td colspan="5" class="muted">No accounts yet — the cage is quiet.</td></tr>';
+    $('accRows').innerHTML = rows || '<tr><td colspan="6" class="muted">No accounts yet — the cage is quiet.</td></tr>';
 
     var trows = '';
     d.tables.forEach(function (t) {

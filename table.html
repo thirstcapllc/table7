@@ -167,7 +167,10 @@
     padding: 22px 22px 24px; width: 100%; max-width: 460px; margin: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.6); }
   .lobbyCard h2 { color: var(--gold); letter-spacing: 5px; text-align: center; }
   .lobbyCard .sub { color: var(--muted); font-size: 0.8rem; text-align: center; margin: 2px 0 12px; font-style: italic; }
-  #cageLine { color: var(--gold); font-family: Verdana, sans-serif; font-size: 0.9rem; text-align: center; margin-bottom: 12px; letter-spacing: 1px; }
+  #cageLine { color: var(--gold); font-family: Verdana, sans-serif; font-size: 0.9rem; text-align: center; margin-bottom: 4px; letter-spacing: 1px; }
+  #loginInfo { text-align: center; font-size: 0.74rem; color: var(--muted); margin-bottom: 10px; }
+  #loginInfo b { color: var(--cream); font-family: Verdana, sans-serif; letter-spacing: 1px; }
+  #loginInfo .save { color: var(--gold-dim); }
   .lobbyCard label.fld { display: block; text-align: left; font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin: 8px 2px 3px; }
   .lobbyCard input, .lobbyCard select { width: 100%; padding: 9px 11px; border-radius: 8px; border: 1px solid var(--line);
     background: var(--card2); color: var(--cream); font-family: Verdana, sans-serif; font-size: 0.95rem; }
@@ -209,6 +212,7 @@
     <h2>TABLE SEVEN</h2>
     <div class="sub">buy chips at the cage, then find a table</div>
     <div id="cageLine">CAGE BALANCE: &mdash;</div>
+    <div id="loginInfo"></div>
 
     <label class="fld">Your name</label>
     <input id="joinName" maxlength="14" placeholder="Name at the table" autocomplete="off">
@@ -230,6 +234,15 @@
       <div class="row2">
         <input id="joinRoom" maxlength="8" placeholder="CODE" autocomplete="off" style="text-transform:uppercase">
         <button class="primary" id="btnJoinCode" style="flex:0 0 auto">Sit down</button>
+      </div>
+    </div>
+
+    <div class="lobbySec">
+      <h3>Cleared your browser? Log back in</h3>
+      <div class="row2">
+        <input id="loginNo" maxlength="8" inputmode="numeric" placeholder="Player #" autocomplete="off">
+        <input id="loginPin" maxlength="8" inputmode="numeric" placeholder="PIN" autocomplete="off" style="flex:0 0 90px">
+        <button class="primary" id="btnLogin" style="flex:0 0 auto">Log in</button>
       </div>
     </div>
 
@@ -425,7 +438,7 @@ var BJ = (function () {
   var myName = saved && saved.name ? saved.name : '';
   var token = '';
   try { token = localStorage.getItem('t7-token') || ''; } catch (e) {}
-  var cageCash = null;
+  var cageCash = null, myNo = '', myPin = '';
   var stats = { decisions: 0, correct: 0 };
   try { stats = JSON.parse(localStorage.getItem('t7-stats')) || stats; } catch (e) {}
 
@@ -494,14 +507,18 @@ var BJ = (function () {
       body: JSON.stringify({ token: token })
     }).then(function (r) { return r.json(); }).then(function (acc) {
       token = acc.token; cageCash = acc.cash;
+      if (acc.no) myNo = acc.no; if (acc.pin) myPin = acc.pin;
+      if (acc.name && !myName) myName = acc.name;
       try { localStorage.setItem('t7-token', token); } catch (e) {}
-      if (acc.created) $('joinErr').textContent = 'Welcome in! The cage staked you ' + fmt(acc.cash) + '.';
+      if (acc.created) $('joinErr').textContent = 'Welcome in! The cage staked you ' + fmt(acc.cash) + '. Save your Player # below to log back in.';
       else if (acc.comped) $('joinErr').textContent = 'You were broke — the cage staked you back to ' + fmt(acc.cash) + '.';
       updateCageUI();
     }).catch(function () {});
   }
   function updateCageUI() {
     $('cageLine').innerHTML = 'CAGE BALANCE: <b>' + (cageCash === null ? '—' : fmt(cageCash)) + '</b>';
+    if (myNo) $('loginInfo').innerHTML = 'Player <b>#' + myNo + '</b> &middot; PIN <b>' + myPin +
+      '</b> <span class="save">— write these down to log back in on any device.</span>';
     $('stCage').textContent = cageCash === null ? '—' : fmt(cageCash);
     var sel = $('buyIn');
     for (var i = 0; i < sel.options.length; i++)
@@ -610,6 +627,27 @@ var BJ = (function () {
     f.style.display = f.style.display === 'block' ? 'none' : 'block';
   });
   $('btnCreate').addEventListener('click', function () { doJoin('', readConfigForm()); });
+
+  function doLogin() {
+    var no = $('loginNo').value.replace(/\D/g, '');
+    var pin = $('loginPin').value.replace(/\D/g, '');
+    if (!no || !pin) { $('joinErr').textContent = 'Enter your Player # and PIN.'; return; }
+    $('joinErr').textContent = 'Checking the cage…';
+    fetch('/api/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ number: no, pin: pin, discard: token })
+    }).then(function (r) { return r.json(); }).then(function (res) {
+      if (res.error) { $('joinErr').textContent = res.error; return; }
+      token = res.token; cageCash = res.cash; myNo = res.no; myPin = res.pin;
+      if (res.name) { myName = res.name; $('joinName').value = res.name; }
+      try { localStorage.setItem('t7-token', token); } catch (e) {}
+      $('joinErr').textContent = 'Welcome back, Player #' + myNo + ' — cage balance ' + fmt(cageCash) + '.';
+      $('loginNo').value = ''; $('loginPin').value = '';
+      updateCageUI();
+    }).catch(function () { $('joinErr').textContent = 'Could not reach the cage.'; });
+  }
+  $('btnLogin').addEventListener('click', doLogin);
+  $('loginPin').addEventListener('keydown', function (e) { if (e.key === 'Enter') doLogin(); });
 
   // ---------- live connection ----------
   var ws = null, wsUp = false, wsRetry = 800;

@@ -113,8 +113,22 @@ function basicStrategy(cards, up, canDouble, canSplit) {
 
 // ---------- the cage (persistent accounts) ----------
 const CAGE_FILE = process.env.TABLE_CAGE_FILE || path.join(ROOT, 'cage-data.json');
-const accounts = new Map(); // token -> { name, cash, comps }
+const accounts = new Map(); // token(secret) -> { name, cash, comps, no, pin }
+const byNumber = new Map(); // player number -> token  (for logging back in)
 let cageSaveTimer = null;
+
+function newPlayerNo() {
+  for (;;) {
+    const n = String(Math.floor(100000 + Math.random() * 900000)); // 6 digits
+    if (!byNumber.has(n)) return n;
+  }
+}
+function newPin() { return String(Math.floor(1000 + Math.random() * 9000)); } // 4 digits
+function pinEqual(a, b) {
+  const ba = Buffer.from(String(a)), bb = Buffer.from(String(b));
+  if (ba.length !== bb.length || !ba.length) return false;
+  return crypto.timingSafeEqual(ba, bb);
+}
 
 function loadCage() {
   try {
@@ -122,6 +136,14 @@ function loadCage() {
     for (const [token, acc] of Object.entries(data)) accounts.set(token, acc);
     console.log('  Cage ledger loaded: ' + accounts.size + ' account(s).');
   } catch (e) { /* first run — empty cage */ }
+  // index by player number, and back-fill numbers/PINs for older accounts
+  let changed = false;
+  for (const [token, acc] of accounts) if (acc.no) byNumber.set(acc.no, token);
+  for (const [token, acc] of accounts) {
+    if (!acc.no) { acc.no = newPlayerNo(); byNumber.set(acc.no, token); changed = true; }
+    if (!acc.pin) { acc.pin = newPin(); changed = true; }
+  }
+  if (changed) saveCageSoon();
 }
 
 function saveCageSoon() {
@@ -140,8 +162,9 @@ function getAccount(token) {
   let created = false, comped = false;
   if (!acc) {
     token = crypto.randomBytes(12).toString('hex');
-    acc = { name: '', cash: START_CASH, comps: 0 };
+    acc = { name: '', cash: START_CASH, comps: 0, no: newPlayerNo(), pin: newPin() };
     accounts.set(token, acc);
+    byNumber.set(acc.no, token);
     created = true;
   } else if (acc.cash < 50) {
     acc.cash += COMP_CASH;
@@ -962,7 +985,7 @@ const server = http.createServer(async (req, res) => {
           for (const g of rooms.values())
             for (const q of g.players) if (q.token) seatedAt[q.token] = g.code;
           const accs = [...accounts.entries()].map(([token, acc]) => ({
-            token, name: acc.name || '(unnamed)', cash: acc.cash,
+            token, no: acc.no || '—', name: acc.name || '(unnamed)', cash: acc.cash,
             comps: acc.comps || 0, seated: seatedAt[token] || null
           })).sort((x, y) => y.cash - x.cash);
           const tables = [...rooms.values()].map(g => ({
@@ -977,11 +1000,13 @@ const server = http.createServer(async (req, res) => {
         }
         if (p === '/api/admin/delete') {
           const token = String(body.token || '');
-          if (!accounts.has(token)) { sendJSON(res, 400, { error: 'No such account.' }); return; }
+          const acc0 = accounts.get(token);
+          if (!acc0) { sendJSON(res, 400, { error: 'No such account.' }); return; }
           for (const g of rooms.values()) {
             const q = g.players.find(pp => pp.token === token);
             if (q) { g.players = g.players.filter(pp => pp.id !== q.id); ensureHost(g); bump(g); }
           }
+          if (acc0.no) byNumber.delete(acc0.no);
           accounts.delete(token);
           saveCageSoon();
           sendJSON(res, 200, { ok: true });
@@ -1009,7 +1034,30 @@ const server = http.createServer(async (req, res) => {
       if (p === '/api/account') {
         const { token, acc, created, comped } = getAccount(body.token);
         if (body.name) acc.name = cleanName(body.name);
-        sendJSON(res, 200, { token, cash: acc.cash, name: acc.name, created, comped });
+        sendJSON(res, 200, { token, cash: acc.cash, name: acc.name, no: acc.no, pin: acc.pin, created, comped });
+        return;
+      }
+
+      if (p === '/api/login') {
+        const number = String(body.number || '').replace(/\D/g, '').slice(0, 8);
+        const pin = String(body.pin || '').replace(/\D/g, '').slice(0, 8);
+        const token = byNumber.get(number);
+        const acc = token ? accounts.get(token) : null;
+        if (!acc || !pinEqual(acc.pin, pin)) {
+          await new Promise(r => setTimeout(r, 400)); // slow brute force
+          sendJSON(res, 403, { error: 'Player number or PIN is wrong.' });
+          return;
+        }
+        // tidy up: if they were a brand-new untouched guest, retire that account
+        const discard = String(body.discard || '');
+        if (discard && discard !== token && accounts.has(discard)) {
+          const guest = accounts.get(discard);
+          const seated = [...rooms.values()].some(r => r.players.some(pp => pp.token === discard));
+          if (guest.cash === START_CASH && !guest.name && !seated) {
+            accounts.delete(discard); byNumber.delete(guest.no); saveCageSoon();
+          }
+        }
+        sendJSON(res, 200, { token, cash: acc.cash, name: acc.name, no: acc.no, pin: acc.pin });
         return;
       }
 

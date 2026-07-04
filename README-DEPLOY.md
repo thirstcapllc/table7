@@ -74,6 +74,10 @@ credit or dock anyone's cage cash, and delete accounts. It's protected by a key:
   color up when you leave — winnings survive between sessions. On Railway the
   file resets on each redeploy; attach a Railway Volume mounted at the app
   directory if you want the ledger to survive deploys.
+- **Player # + PIN**: each account shows a 6-digit Player # and 4-digit PIN in
+  the lobby. The browser normally remembers you, but if a player clears their
+  cookies (or switches devices) they can type their Player # + PIN into the
+  "Log back in" box to reclaim their chips. The Pit Boss console lists Player #s.
 - Open tables live in memory: a restart or redeploy closes them (cage
   balances survive if the file does; everyone just rejoins).
 - Tables close themselves after ~20 minutes with no humans around; max 50 tables
