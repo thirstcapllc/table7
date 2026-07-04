@@ -104,14 +104,33 @@ class JsonStore {
 class PgStore {
   constructor(connectionString) {
     const { Pool } = require('pg');
-    const isLocal = /localhost|127\.0\.0\.1/.test(connectionString);
+    // Railway's internal/private database hostname (…​.railway.internal) and
+    // local Postgres speak plaintext; the public proxy URL requires TLS. Pick
+    // SSL by host so a first deploy works whichever URL you wired up.
+    let host = '';
+    try { host = new URL(connectionString).hostname; } catch (e) {}
+    const noSsl = /localhost|127\.0\.0\.1|\.railway\.internal$/.test(host);
     this.pool = new Pool({
       connectionString,
-      ssl: isLocal ? false : { rejectUnauthorized: false }
+      ssl: noSsl ? false : { rejectUnauthorized: false }
     });
   }
 
   async init() {
+    // Private networking often isn't resolvable in the first second after the
+    // container starts, so retry the initial connection a few times before
+    // giving up — otherwise a normal cold start would crash-loop the app.
+    let lastErr = null;
+    for (let attempt = 1; attempt <= 8; attempt++) {
+      try { await this.pool.query('SELECT 1'); lastErr = null; break; }
+      catch (e) {
+        lastErr = e;
+        console.error('  [store] Postgres not ready (attempt ' + attempt + '/8): ' + (e.message || e));
+        await new Promise(r => setTimeout(r, Math.min(3000, attempt * 600)));
+      }
+    }
+    if (lastErr) throw lastErr;
+
     await this.pool.query(`
       CREATE TABLE IF NOT EXISTS accounts (
         token TEXT PRIMARY KEY,
