@@ -1,10 +1,12 @@
 # TABLE SEVEN — deploy guide
 
-Private multiplayer blackjack with a basic-strategy coach. Zero dependencies —
-one Node server (`table-server.js`) serves the landing page (`/`), the live
-table (`/play`), the solo trainer (`/blackjack-trainer.html`), and the Vegas
-playbook (`/vegas-playbook.html`). Old share links to `/?t=CODE` auto-forward
-into `/play?t=CODE`.
+Private multiplayer blackjack with a basic-strategy coach. One Node server
+(`table-server.js`) serves the landing page (`/`), the live table (`/play`),
+the solo trainer (`/blackjack-trainer.html`), the Vegas playbook
+(`/vegas-playbook.html`), a donation page (`/donate`), and legal pages
+(`/privacy.html`, `/terms.html`). Old share links to `/?t=CODE` auto-forward
+into `/play?t=CODE`. The only dependency is `pg` (Postgres client); with no
+`DATABASE_URL` set it falls back to a local JSON file and needs nothing.
 
 Every game lives at a table code (share link like `/?t=K7Q4`). Public tables
 show up in the lobby for anyone to join; private ones are join-by-code only, so
@@ -31,18 +33,30 @@ WiFi joins with the link the page shows you.
 ## Deploy on Railway
 
 1. Push this folder to a GitHub repo (the included `.gitignore` keeps the
-   unrelated projects out):
-   ```
-   git init
-   git add table-server.js table.html admin.html vegas-playbook.html blackjack-trainer.html package.json README-DEPLOY.md Start-TableSeven.cmd .gitignore
-   git commit -m "Table Seven v1"
-   ```
-   Then create a repo on GitHub and `git push`.
+   unrelated projects and local data files out). All the `.html` files,
+   `table-server.js`, `store.js`, `package.json`, and `.gitignore` are needed.
 2. On [railway.app](https://railway.app): **New Project → Deploy from GitHub repo**
-   and pick the repo. Railway detects `package.json` and runs `npm start`.
-   The server honors Railway's `PORT` automatically — no config needed.
+   and pick the repo. Railway detects `package.json`, runs `npm install`
+   (installs `pg`) and `npm start`. The server honors Railway's `PORT`.
 3. In the service settings, open **Networking → Generate Domain** to get a
    `*.up.railway.app` URL and confirm it works.
+
+## Database (persist across redeploys) — do this before inviting real players
+
+Without a database, cage balances and history reset on every redeploy. To make
+them permanent:
+
+1. In your Railway project: **New → Database → Add PostgreSQL**.
+2. Open your **table7** service (the app, not the database) → **Variables →
+   New Variable**: name `DATABASE_URL`, value `${{ Postgres.DATABASE_URL }}`
+   (Railway resolves the reference to the private connection). Save — it
+   redeploys.
+3. On boot the server creates its tables automatically (`accounts`,
+   `transactions`, `hands`) and prints `Storage: Postgres` in the deploy logs.
+   It retries the connection a few times to ride out the cold-start race, and
+   picks SSL by host (plaintext for the private `.railway.internal` URL, TLS
+   for the public proxy URL), so either `DATABASE_URL` works.
+4. Verify: play a hand, redeploy, and confirm your balance survived.
 
 ## Point your subdomain at it
 
@@ -57,7 +71,9 @@ Suggested subdomain: **table7.yourdomain.com** (short, on-brand).
 ## The Pit Boss console
 
 `/admin` is the house control room: see every cage account and open table,
-credit or dock anyone's cage cash, and delete accounts. It's protected by a key:
+credit or dock cage cash, reset a forgotten PIN, delete accounts, and view a
+full **History** per account (every buy-in, cash-out, rebuy, admin adjustment,
+and hand-by-hand result). It's protected by a key:
 
 - Locally the key is printed in the server console at every start.
 - For a permanent key (do this on Railway): set the `TABLE_ADMIN_KEY`
@@ -71,18 +87,27 @@ credit or dock anyone's cage cash, and delete accounts. It's protected by a key:
   instantly, and if someone closes their tab the table banks their chips at
   the cage and frees the seat within seconds. Falls back to polling if a
   proxy blocks websockets. Railway supports websockets out of the box.
-- **The cage**: every visitor gets a persistent account staked with $1,000
-  (stored in `cage-data.json` next to the server). Buy chips into a table,
-  color up when you leave — winnings survive between sessions. On Railway the
-  file resets on each redeploy; attach a Railway Volume mounted at the app
-  directory if you want the ledger to survive deploys.
+- **The cage**: every visitor gets an account staked with $1,000. A short
+  onboarding screen shows first-time players their Player # + PIN with a copy
+  button and a "save this" checkbox before they can continue. Balances and
+  history live in Postgres when `DATABASE_URL` is set (survive redeploys),
+  or a local `cage-data.json` otherwise.
+- **Rate limiting**: every `POST /api/*` is throttled per IP (strict on login
+  and admin endpoints, moderate on join/account, generous for gameplay).
+  Exceeding a limit returns `429` with a `Retry-After` header. Client IP is
+  read from `x-forwarded-for` (correct behind Railway's proxy).
+- **Legal + donations**: `/privacy.html`, `/terms.html`, and `/donate`
+  (PayPal hosted button) are linked from the landing and lobby. The legal
+  pages are plain-language summaries for a free play-money game — get a lawyer
+  to review them before a wide public launch.
 - **Player # + PIN**: each account shows a 6-digit Player # and 4-digit PIN in
   the lobby. The browser normally remembers you, but if a player clears their
   cookies (or switches devices) they can type their Player # + PIN into the
   "Log back in" box to reclaim their chips. The Pit Boss console lists Player #s.
 - Open tables live in memory: a restart or redeploy closes them (cage
-  balances survive if the file does; everyone just rejoins).
+  balances and history survive in Postgres; everyone just rejoins).
 - Tables close themselves after ~20 minutes with no humans around; max 50 tables
   at once; up to 6 seats per table (players + bots).
-- Only the game pages are ever served (landing, `/play`, playbook, trainer,
-  admin) — nothing else in the repo/folder is reachable from the internet.
+- Only an explicit allowlist of pages is ever served (landing, `/play`,
+  playbook, trainer, admin, donate, privacy, terms) — nothing else in the
+  repo/folder (server code, `store.js`, data files) is reachable over HTTP.

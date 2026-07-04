@@ -82,8 +82,16 @@ class JsonStore {
 
   async getHistory(token, limit) {
     limit = limit || 100;
-    const tx = this.transactions.filter(t => t.token === token).slice(-limit).reverse();
-    const hd = this.hands.filter(h => h.token === token).slice(-limit).reverse();
+    // return the same snake_case shape PgStore does, so the admin UI is
+    // backend-agnostic
+    const tx = this.transactions.filter(t => t.token === token).slice(-limit).reverse().map(t => ({
+      type: t.type, amount: t.amount, balance_after: t.balanceAfter,
+      table_code: t.tableCode || null, note: t.note || null, created_at: t.created_at
+    }));
+    const hd = this.hands.filter(h => h.token === token).slice(-limit).reverse().map(h => ({
+      table_code: h.tableCode || null, round: h.round, bet: h.bet,
+      result: h.result, payout: h.payout, created_at: h.created_at
+    }));
     return { transactions: tx, hands: hd };
   }
 

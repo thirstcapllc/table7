@@ -35,8 +35,22 @@
   }
   button.primary { background: var(--gold); color: #1a1a1a; border-color: var(--gold); }
   button.credit { background: var(--green); border-color: var(--green); color: #fff; }
+  button.hist { background: var(--card2); border-color: var(--gold-dim); color: var(--gold); }
   button.pin { background: #4a5fa5; border-color: #4a5fa5; color: #fff; }
   button.del { background: var(--red); border-color: var(--red); color: #fff; }
+  /* history modal */
+  #histModal { position: fixed; inset: 0; background: rgba(5,14,10,0.9); z-index: 60; display: none;
+    align-items: flex-start; justify-content: center; padding: 30px 14px; overflow-y: auto; }
+  .histCard { background: var(--card); border: 2px solid var(--gold-dim); border-radius: 14px; padding: 22px 22px 26px;
+    width: 100%; max-width: 760px; margin: auto; }
+  .histCard h2 { display: flex; justify-content: space-between; align-items: center; }
+  .histCard h3 { color: var(--gold-dim); font-size: 0.85rem; letter-spacing: 2px; text-transform: uppercase; margin: 20px 0 8px; }
+  .histCard .closeX { background: none; border: none; color: var(--muted); font-size: 1.4rem; cursor: pointer; padding: 0 6px; }
+  .histTable { font-size: 0.82rem; }
+  .histTable td, .histTable th { padding: 5px 8px; }
+  .amtPos { color: #7fd1a0; font-family: Verdana, sans-serif; } .amtNeg { color: #e07a5f; font-family: Verdana, sans-serif; }
+  .when { color: var(--muted); font-size: 0.72rem; white-space: nowrap; }
+  .histScroll { max-height: 34vh; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; }
   input {
     padding: 7px 9px; border-radius: 8px; border: 1px solid var(--line);
     background: var(--card2); color: var(--cream); font-family: Verdana, sans-serif; font-size: 0.85rem;
@@ -95,6 +109,22 @@
   </div>
 </main>
 
+<div id="histModal">
+  <div class="histCard">
+    <h2><span id="histTitle">History</span> <button class="closeX" id="histClose">&times;</button></h2>
+    <h3>Cage Transactions</h3>
+    <div class="histScroll">
+      <table class="histTable"><thead><tr><th>When</th><th>Type</th><th>Amount</th><th>Balance</th><th>Table</th><th>Note</th></tr></thead>
+      <tbody id="histTx"></tbody></table>
+    </div>
+    <h3>Hands Played</h3>
+    <div class="histScroll">
+      <table class="histTable"><thead><tr><th>When</th><th>Table</th><th>Round</th><th>Bet</th><th>Result</th><th>Net</th></tr></thead>
+      <tbody id="histHands"></tbody></table>
+    </div>
+  </div>
+</div>
+
 <footer>TABLE SEVEN &middot; the house always watches</footer>
 
 <script>
@@ -144,6 +174,7 @@
           '<button class="credit" data-t="' + a.token + '" data-a="1000">+$1,000</button>' +
           '<input class="amt" type="number" step="5" placeholder="±$" data-for="' + a.token + '">' +
           '<button class="apply" data-t="' + a.token + '">Apply</button>' +
+          '<button class="hist" data-t="' + a.token + '" data-n="' + esc(a.name) + '" data-no="' + esc(a.no || '') + '" title="View history">📜 History</button>' +
           '<button class="pin" data-t="' + a.token + '" data-n="' + esc(a.name) + '" data-no="' + esc(a.no || '') + '" title="Reset PIN">🔑 PIN</button>' +
           '<button class="del" data-t="' + a.token + '" data-n="' + esc(a.name) + '" title="Delete account">🗑</button>' +
         '</td></tr>';
@@ -199,12 +230,43 @@
     });
   }
 
+  function when(iso) {
+    try { var d = new Date(iso); return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
+    catch (e) { return String(iso || ''); }
+  }
+  function money(n) { n = Number(n); var cls = n > 0 ? 'amtPos' : (n < 0 ? 'amtNeg' : 'muted'); return '<span class="' + cls + '">' + (n > 0 ? '+' : '') + fmt(n) + '</span>'; }
+
+  function showHistory(token, name, no) {
+    $('histTitle').textContent = (name || 'Player') + '  (Player #' + (no || '?') + ')';
+    $('histTx').innerHTML = '<tr><td colspan="6" class="muted">Loading…</td></tr>';
+    $('histHands').innerHTML = '';
+    $('histModal').style.display = 'flex';
+    post('/api/admin/history', { token: token }).then(function (res) {
+      if (res.status === 403) { lockUp('That key stopped working.'); $('histModal').style.display = 'none'; return; }
+      if (res.data.error) { status(res.data.error, 'err'); $('histModal').style.display = 'none'; return; }
+      var tx = res.data.transactions || [], hd = res.data.hands || [];
+      $('histTx').innerHTML = tx.length ? tx.map(function (t) {
+        return '<tr><td class="when">' + when(t.created_at) + '</td><td>' + esc(t.type) + '</td><td>' + money(t.amount) +
+          '</td><td class="cash">' + fmt(Number(t.balance_after)) + '</td><td>' + (t.table_code ? '<span class="tag">' + esc(t.table_code) + '</span>' : '—') +
+          '</td><td class="muted">' + esc(t.note || '') + '</td></tr>';
+      }).join('') : '<tr><td colspan="6" class="muted">No transactions yet.</td></tr>';
+      $('histHands').innerHTML = hd.length ? hd.map(function (h) {
+        return '<tr><td class="when">' + when(h.created_at) + '</td><td>' + (h.table_code ? '<span class="tag">' + esc(h.table_code) + '</span>' : '—') +
+          '</td><td>' + (h.round || '') + '</td><td>' + fmt(Number(h.bet)) + '</td><td>' + esc(h.result || '') + '</td><td>' + money(h.payout) + '</td></tr>';
+      }).join('') : '<tr><td colspan="6" class="muted">No hands played yet.</td></tr>';
+    });
+  }
+  $('histClose').addEventListener('click', function () { $('histModal').style.display = 'none'; });
+  $('histModal').addEventListener('click', function (e) { if (e.target === $('histModal')) $('histModal').style.display = 'none'; });
+
   document.addEventListener('click', function (e) {
     var b = e.target;
     if (b.classList && b.classList.contains('credit')) {
       credit(b.dataset.t, Number(b.dataset.a));
     } else if (b.classList && b.classList.contains('del')) {
       deleteUser(b.dataset.t, b.dataset.n || 'this');
+    } else if (b.classList && b.classList.contains('hist')) {
+      showHistory(b.dataset.t, b.dataset.n || 'Player', b.dataset.no);
     } else if (b.classList && b.classList.contains('pin')) {
       resetPin(b.dataset.t, b.dataset.n || 'this', b.dataset.no);
     } else if (b.classList && b.classList.contains('apply')) {

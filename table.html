@@ -191,6 +191,18 @@
   .lobbyCard a { color: var(--gold-dim); }
   .linkbtn { background: none; border: none; color: var(--gold-dim); font-family: Georgia, serif; font-size: 0.82rem;
     cursor: pointer; text-decoration: underline; padding: 4px; }
+  /* onboarding (first-time players) */
+  .credBox { background: var(--card2); border: 1px solid var(--gold-dim); border-radius: 12px; padding: 14px 16px; margin: 14px 0; }
+  .credRow { display: flex; justify-content: space-between; align-items: center; padding: 5px 2px; }
+  .credLab { color: var(--muted); font-size: 0.74rem; text-transform: uppercase; letter-spacing: 1px; }
+  .credVal { font-family: Verdana, sans-serif; font-weight: bold; font-size: 1.5rem; color: var(--gold); letter-spacing: 2px; }
+  .copymsg { color: #7fd1a0; font-size: 0.78rem; min-height: 16px; margin-top: 6px; text-align: center; }
+  .obline { color: var(--cream); font-size: 0.92rem; line-height: 1.55; margin-bottom: 4px; text-align: center; }
+  .obwarn { color: #e0b060; font-size: 0.82rem; line-height: 1.5; margin: 12px 0 4px; text-align: center; }
+  .obcheck { display: flex; align-items: center; gap: 8px; justify-content: center; font-size: 0.86rem; color: var(--cream); margin: 14px 0 10px; cursor: pointer; }
+  .obcheck input { width: auto; }
+  .finelegal { text-align: center; font-size: 0.68rem; color: var(--muted); margin-top: 14px; }
+  .finelegal a { color: var(--gold-dim); }
   .away { color: #e07a5f !important; }
   #chipRack { text-align: center; margin: 6px 0 2px; font-size: 0.78rem; color: var(--muted); min-height: 0; }
   #chipRack .chipstack { vertical-align: bottom; margin: 0 2px; }
@@ -227,71 +239,96 @@
      <a href="/">Home</a> &middot; <a href="vegas-playbook.html">Playbook</a> &middot; <a href="blackjack-trainer.html">Solo trainer</a></p>
 </header>
 
-<!-- ===== LOBBY ===== -->
+<!-- ===== LOBBY + ONBOARDING ===== -->
 <div id="joinOverlay">
   <div class="lobbyCard">
-    <h2>TABLE SEVEN</h2>
-    <div class="sub">buy chips at the cage, then find a table</div>
-    <div id="cageLine">CAGE BALANCE: &mdash;</div>
-    <div id="loginInfo"></div>
 
-    <label class="fld">Your name</label>
-    <input id="joinName" maxlength="14" placeholder="Name at the table" autocomplete="off">
-    <label class="fld">Buy-in (chips you bring to the felt)</label>
-    <select id="buyIn">
-      <option value="100">$100</option>
-      <option value="300" selected>$300</option>
-      <option value="500">$500</option>
-      <option value="1000">$1,000</option>
-    </select>
-
-    <div class="lobbySec">
-      <h3>Open Tables</h3>
-      <div id="lobbyList"><div class="lobbyEmpty">Looking for tables…</div></div>
-    </div>
-
-    <div class="lobbySec">
-      <h3>Private table? Join by code</h3>
-      <div class="row2">
-        <input id="joinRoom" maxlength="8" placeholder="CODE" autocomplete="off" style="text-transform:uppercase">
-        <button class="primary" id="btnJoinCode" style="flex:0 0 auto">Sit down</button>
+    <!-- First-time players: welcome + save your login -->
+    <div id="onboardView" style="display:none">
+      <h2>WELCOME</h2>
+      <div class="sub">you just walked up to the cage</div>
+      <p class="obline" style="margin-top:14px">The house staked you <b id="obCash" style="color:var(--gold)">$1,000</b> in <b>play money</b> — all for fun, no real cash, nothing to lose.</p>
+      <p class="obline">This is your table account:</p>
+      <div class="credBox">
+        <div class="credRow"><span class="credLab">Player #</span><span class="credVal" id="obNo">&mdash;</span></div>
+        <div class="credRow"><span class="credLab">PIN</span><span class="credVal" id="obPin">&mdash;</span></div>
+        <button id="obCopy" class="linkbtn" style="display:block; margin:8px auto 0">&#128203; Copy my login</button>
+        <div id="obCopyMsg" class="copymsg"></div>
       </div>
+      <p class="obwarn">Save these somewhere! They're the <b>only way back into your account</b> if your browser clears or you switch devices — nobody can recover them for you.</p>
+      <label class="obcheck"><input type="checkbox" id="obSaved"> I've saved my Player&nbsp;# and PIN</label>
+      <button class="primary" id="obContinue" style="width:100%" disabled>Continue to the tables &rarr;</button>
+      <p class="finelegal">Free play &middot; fake money &middot; <a href="/privacy.html">Privacy</a> &middot; <a href="/terms.html">Terms</a></p>
     </div>
 
-    <div class="lobbySec">
-      <h3>Cleared your browser? Log back in</h3>
-      <div class="row2">
-        <input id="loginNo" maxlength="8" inputmode="numeric" placeholder="Player #" autocomplete="off">
-        <input id="loginPin" maxlength="8" inputmode="numeric" placeholder="PIN" autocomplete="off" style="flex:0 0 90px">
-        <button class="primary" id="btnLogin" style="flex:0 0 auto">Log in</button>
+    <!-- Returning players / after onboarding: the lobby -->
+    <div id="lobbyView">
+      <h2>TABLE SEVEN</h2>
+      <div class="sub">grab a seat &mdash; or start your own table</div>
+      <div id="cageLine">CAGE BALANCE: &mdash;</div>
+      <div id="loginInfo"></div>
+
+      <label class="fld">Your name</label>
+      <input id="joinName" maxlength="14" placeholder="Name at the table" autocomplete="off">
+      <label class="fld">Buy-in (chips you bring to the felt)</label>
+      <select id="buyIn">
+        <option value="100">$100</option>
+        <option value="300" selected>$300</option>
+        <option value="500">$500</option>
+        <option value="1000">$1,000</option>
+      </select>
+
+      <div class="lobbySec">
+        <h3>Open Tables &mdash; tap to sit</h3>
+        <div id="lobbyList"><div class="lobbyEmpty">Looking for tables…</div></div>
       </div>
-    </div>
 
-    <div class="lobbySec">
-      <button class="linkbtn" id="btnShowCreate">+ Create your own table</button>
-      <div id="createForm">
-        <div class="cfgGrid">
-          <div><label class="fld">Visibility</label>
-            <select id="cfgPublic"><option value="1" selected>Public (listed)</option><option value="0">Private (code only)</option></select></div>
-          <div><label class="fld">Blackjack pays</label>
-            <select id="cfgPayout"><option value="3:2" selected>3:2 (good)</option><option value="6:5">6:5 (Strip)</option></select></div>
-          <div><label class="fld">Decks</label>
-            <select id="cfgDecks"><option>1</option><option>2</option><option>4</option><option selected>6</option><option>8</option></select></div>
-          <div><label class="fld">Dealer soft 17</label>
-            <select id="cfgH17"><option value="1" selected>Hits (H17)</option><option value="0">Stands (S17)</option></select></div>
-          <div><label class="fld">Double after split</label>
-            <select id="cfgDas"><option value="1" selected>Allowed</option><option value="0">Not allowed</option></select></div>
-          <div><label class="fld">Surrender</label>
-            <select id="cfgSurr"><option value="0" selected>No</option><option value="1">Late surrender</option></select></div>
+      <div class="lobbySec">
+        <button class="linkbtn" id="btnShowMore">&#43; Create a table, or join a private one by code</button>
+        <div id="moreOptions" style="display:none">
+          <div id="createForm" style="display:block; margin-top:10px">
+            <div class="cfgGrid">
+              <div><label class="fld">Visibility</label>
+                <select id="cfgPublic"><option value="1" selected>Public (listed)</option><option value="0">Private (code only)</option></select></div>
+              <div><label class="fld">Blackjack pays</label>
+                <select id="cfgPayout"><option value="3:2" selected>3:2 (good)</option><option value="6:5">6:5 (Strip)</option></select></div>
+              <div><label class="fld">Decks</label>
+                <select id="cfgDecks"><option>1</option><option>2</option><option>4</option><option selected>6</option><option>8</option></select></div>
+              <div><label class="fld">Dealer soft 17</label>
+                <select id="cfgH17"><option value="1" selected>Hits (H17)</option><option value="0">Stands (S17)</option></select></div>
+              <div><label class="fld">Double after split</label>
+                <select id="cfgDas"><option value="1" selected>Allowed</option><option value="0">Not allowed</option></select></div>
+              <div><label class="fld">Surrender</label>
+                <select id="cfgSurr"><option value="0" selected>No</option><option value="1">Late surrender</option></select></div>
+            </div>
+            <button class="primary" id="btnCreate" style="width:100%; margin-top:12px">Open table &amp; sit as host</button>
+          </div>
+          <div style="margin-top:14px">
+            <label class="fld">Join a private table by code</label>
+            <div class="row2">
+              <input id="joinRoom" maxlength="8" placeholder="CODE" autocomplete="off" style="text-transform:uppercase">
+              <button class="primary" id="btnJoinCode" style="flex:0 0 auto">Sit down</button>
+            </div>
+          </div>
         </div>
-        <button class="primary" id="btnCreate" style="width:100%; margin-top:12px">Open table &amp; sit as host</button>
       </div>
-    </div>
 
-    <div id="joinErr"></div>
-    <p style="text-align:center; font-size:0.68rem; color:var(--muted); margin-top:14px">
-      Free play &middot; fake money &middot; <a href="/privacy.html">Privacy</a> &middot; <a href="/terms.html">Terms</a>
-    </p>
+      <div class="lobbySec">
+        <button class="linkbtn" id="btnShowLogin">Played before on another device? Log in with your Player&nbsp;#</button>
+        <div id="loginBox" style="display:none; margin-top:10px">
+          <div class="row2">
+            <input id="loginNo" maxlength="8" inputmode="numeric" placeholder="Player #" autocomplete="off">
+            <input id="loginPin" maxlength="8" inputmode="numeric" placeholder="PIN" autocomplete="off" style="flex:0 0 90px">
+            <button class="primary" id="btnLogin" style="flex:0 0 auto">Log in</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="joinErr"></div>
+      <p class="finelegal">
+        Free play &middot; fake money &middot; <a href="/privacy.html">Privacy</a> &middot; <a href="/terms.html">Terms</a> &middot; <a href="/donate.html">Donate</a>
+      </p>
+    </div>
   </div>
 </div>
 
@@ -467,7 +504,7 @@ var BJ = (function () {
   var myName = saved && saved.name ? saved.name : '';
   var token = '';
   try { token = localStorage.getItem('t7-token') || ''; } catch (e) {}
-  var cageCash = null, myNo = '', myPin = '';
+  var cageCash = null, myNo = '', myPin = '', newAccount = false;
   var stats = { decisions: 0, correct: 0 };
   try { stats = JSON.parse(localStorage.getItem('t7-stats')) || stats; } catch (e) {}
 
@@ -538,9 +575,15 @@ var BJ = (function () {
       token = acc.token; cageCash = acc.cash;
       if (acc.no) myNo = acc.no; if (acc.pin) myPin = acc.pin;
       if (acc.name && !myName) myName = acc.name;
+      newAccount = !!acc.created;
       try { localStorage.setItem('t7-token', token); } catch (e) {}
-      if (acc.created) $('joinErr').textContent = 'Welcome in! The cage staked you ' + fmt(acc.cash) + '. Save your Player # below to log back in.';
-      else if (acc.comped) $('joinErr').textContent = 'You were broke — the cage staked you back to ' + fmt(acc.cash) + '.';
+      if (newAccount) {
+        $('obCash').textContent = fmt(acc.cash);
+        $('obNo').textContent = myNo;
+        $('obPin').textContent = myPin;
+      } else if (acc.comped) {
+        $('joinErr').textContent = 'You were broke — the cage staked you back to ' + fmt(acc.cash) + '.';
+      }
       updateCageUI();
     }).catch(function () {});
   }
@@ -579,10 +622,19 @@ var BJ = (function () {
   }
   function amHost() { return S && myId && S.host === myId; }
 
-  // ---------- lobby ----------
+  // ---------- lobby + onboarding ----------
   var overlayOpen = true, lobbyTimer = null;
+  function showOnboarding() {
+    overlayOpen = true;
+    $('joinOverlay').style.display = 'flex';
+    $('onboardView').style.display = 'block';
+    $('lobbyView').style.display = 'none';
+    if (lobbyTimer) { clearInterval(lobbyTimer); lobbyTimer = null; }
+  }
   function showLobby(msg) {
     overlayOpen = true;
+    $('onboardView').style.display = 'none';
+    $('lobbyView').style.display = 'block';
     $('joinName').value = myName || '';
     $('joinOverlay').style.display = 'flex';
     if (msg) $('joinErr').textContent = msg;
@@ -648,14 +700,30 @@ var BJ = (function () {
     }).catch(function () { $('joinErr').textContent = 'Could not reach the casino.'; });
   }
 
-  $('joinName').addEventListener('keydown', function (e) { if (e.key === 'Enter') { var c = $('joinRoom').value.trim(); doJoin(c, null); } });
+  $('joinName').addEventListener('keydown', function (e) { if (e.key === 'Enter') { var c = $('joinRoom').value.trim(); if (c) doJoin(c, null); } });
   $('joinRoom').addEventListener('keydown', function (e) { if (e.key === 'Enter') doJoin($('joinRoom').value.trim(), null); });
   $('btnJoinCode').addEventListener('click', function () { doJoin($('joinRoom').value.trim(), null); });
-  $('btnShowCreate').addEventListener('click', function () {
-    var f = $('createForm');
-    f.style.display = f.style.display === 'block' ? 'none' : 'block';
+  $('btnShowMore').addEventListener('click', function () {
+    var m = $('moreOptions');
+    m.style.display = m.style.display === 'none' ? 'block' : 'none';
+  });
+  $('btnShowLogin').addEventListener('click', function () {
+    var b = $('loginBox');
+    b.style.display = b.style.display === 'none' ? 'block' : 'none';
+    if (b.style.display === 'block') $('loginNo').focus();
   });
   $('btnCreate').addEventListener('click', function () { doJoin('', readConfigForm()); });
+
+  // onboarding: copy login, gate Continue on the "I saved it" checkbox
+  $('obCopy').addEventListener('click', function () {
+    var text = 'TABLE SEVEN login — Player #' + myNo + ', PIN ' + myPin;
+    function done() { $('obCopyMsg').textContent = '✓ Copied — paste it somewhere safe.'; }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done).catch(function () { $('obCopyMsg').textContent = 'Player #' + myNo + ' · PIN ' + myPin; });
+    } else { $('obCopyMsg').textContent = 'Player #' + myNo + ' · PIN ' + myPin; }
+  });
+  $('obSaved').addEventListener('change', function () { $('obContinue').disabled = !this.checked; });
+  $('obContinue').addEventListener('click', function () { newAccount = false; showLobby(''); });
 
   function doLogin() {
     var no = $('loginNo').value.replace(/\D/g, '');
@@ -1065,7 +1133,9 @@ var BJ = (function () {
   fetch('/api/info').then(function (r) { return r.json(); }).then(function (info) { lanInfo = info; updateShareBox(); }).catch(function () {});
 
   fetchAccount().then(function () {
-    if (myId && room) { wsConnect(); hideLobby(); } else { showLobby(''); }
+    if (myId && room) { wsConnect(); hideLobby(); }
+    else if (newAccount) { showOnboarding(); }
+    else { showLobby(''); }
     poll();
   });
 })();
