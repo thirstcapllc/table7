@@ -1279,6 +1279,20 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
+      // a player's own history — auth is simply possessing your account token
+      if (p === '/api/my-history') {
+        const tok = String(body.token || '').replace(/[^a-z0-9]/gi, '').slice(0, 40);
+        const acc = tok ? accounts.get(tok) : null;
+        if (!acc) { sendJSON(res, 400, { error: 'Unknown account.' }); return; }
+        const hist = await STORE.getHistory(tok, 100);
+        sendJSON(res, 200, {
+          account: { no: acc.no, name: acc.name, cash: acc.cash, compPoints: acc.compPoints || 0,
+            tier: compTier(acc.compPoints), since: acc.since || null },
+          transactions: hist.transactions, hands: hist.hands
+        });
+        return;
+      }
+
       if (p === '/api/login') {
         const number = String(body.number || '').replace(/\D/g, '').slice(0, 8);
         const pin = String(body.pin || '').replace(/\D/g, '').slice(0, 8);

@@ -283,6 +283,24 @@
 <div id="joinOverlay">
   <div class="lobbyCard">
 
+    <!-- Fresh visitor with no saved account: choose, don't get forced -->
+    <div id="welcomeView" style="display:none">
+      <h2>TABLE SEVEN</h2>
+      <div class="sub">the private online blackjack casino</div>
+      <div class="cardStage" style="margin:16px auto 18px; max-width:300px; opacity:0.9"><div class="memberCard" id="welcomeCard"></div></div>
+      <button class="primary" id="btnNewAccount" style="width:100%; font-size:1rem; padding:13px">Create a new player account</button>
+      <div class="lobbySec" style="margin-top:16px">
+        <div class="sub" style="margin-bottom:8px">Already have a players card?</div>
+        <div class="row2">
+          <input id="welNo" maxlength="8" inputmode="numeric" placeholder="Player #" autocomplete="off">
+          <input id="welPin" maxlength="8" inputmode="numeric" placeholder="PIN" autocomplete="off" style="flex:0 0 90px">
+          <button class="primary" id="btnWelLogin" style="flex:0 0 auto">Log in</button>
+        </div>
+        <div id="welErr" style="color:#e07a5f; font-size:0.8rem; min-height:16px; margin-top:8px; text-align:center"></div>
+      </div>
+      <p class="finelegal">Free play &middot; fake money &middot; <a href="/privacy.html">Privacy</a> &middot; <a href="/terms.html">Terms</a></p>
+    </div>
+
     <!-- First-time players, step 1: welcome + name -->
     <div id="onboardView" style="display:none">
       <h2>WELCOME</h2>
@@ -366,21 +384,31 @@
         </div>
       </div>
 
-      <div class="lobbySec">
-        <button class="linkbtn" id="btnShowLogin">Played before on another device? Log in with your Player&nbsp;#</button>
-        <div id="loginBox" style="display:none; margin-top:10px">
-          <div class="row2">
-            <input id="loginNo" maxlength="8" inputmode="numeric" placeholder="Player #" autocomplete="off">
-            <input id="loginPin" maxlength="8" inputmode="numeric" placeholder="PIN" autocomplete="off" style="flex:0 0 90px">
-            <button class="primary" id="btnLogin" style="flex:0 0 auto">Log in</button>
-          </div>
-        </div>
+      <div class="lobbySec" style="display:flex; justify-content:center; gap:14px">
+        <button class="linkbtn" id="btnAccount">&#9824; My card &amp; history</button>
+        <button class="linkbtn" id="btnLogout">Log out</button>
       </div>
 
       <div id="joinErr"></div>
       <p class="finelegal">
         Free play &middot; fake money &middot; <a href="/privacy.html">Privacy</a> &middot; <a href="/terms.html">Terms</a> &middot; <a href="/donate.html">Donate</a>
       </p>
+    </div>
+
+    <!-- Account page: your card + your own credit/debit history -->
+    <div id="accountView" style="display:none">
+      <h2>MY ACCOUNT</h2>
+      <div class="sub" id="acctSub">your card, chips &amp; history</div>
+      <div class="cardStage" style="margin:14px auto 10px"><div class="memberCard" id="acctCard"></div></div>
+      <div class="credBox" style="display:flex; justify-content:space-around; text-align:center; margin:10px 0">
+        <div><div class="credLab">Cage cash</div><div class="credVal" id="acctCash" style="font-size:1.15rem">&mdash;</div></div>
+        <div><div class="credLab">Tier</div><div class="credVal" id="acctTier" style="font-size:1.15rem">&mdash;</div></div>
+        <div><div class="credLab">Comp pts</div><div class="credVal" id="acctComp" style="font-size:1.15rem">&mdash;</div></div>
+      </div>
+      <div style="text-align:center; font-size:0.72rem; color:var(--muted); margin-bottom:8px">Player <b id="acctNo" style="color:var(--gold)"></b> · PIN <b id="acctPin" style="color:var(--gold)"></b></div>
+      <h3 style="color:var(--gold-dim); font-size:0.8rem; letter-spacing:2px; text-transform:uppercase; margin:12px 0 6px">Cage activity — credits &amp; debits</h3>
+      <div id="acctHist" style="max-height:200px; overflow-y:auto; border:1px solid var(--line); border-radius:8px; font-size:0.8rem"></div>
+      <button class="primary" id="btnAcctBack" style="width:100%; margin-top:14px">&larr; Back</button>
     </div>
   </div>
 </div>
@@ -652,10 +680,12 @@ var BJ = (function () {
     try { var d = new Date(iso); return d.toLocaleDateString(undefined, { month: 'short', year: 'numeric' }); }
     catch (e) { return ''; }
   }
-  function renderMemberCard(name, animate) {
+  function renderMemberCard(elId, name, animate) {
+    var el = $(elId);
+    if (!el) return;
     var tier = myTier || 'Bronze';
     var no = String(myNo || '').replace(/(\d{3})(\d{3})/, '$1 $2');
-    var html =
+    el.innerHTML =
       '<div class="mcRow"><span class="mcBrand">&#9824; TABLE SEVEN</span>' +
         '<span class="mcTier ' + tier + '">' + tier.toUpperCase() + '</span></div>' +
       '<div class="mcChip"></div>' +
@@ -664,8 +694,6 @@ var BJ = (function () {
         '<div class="mcName">' + esc((name || myName || 'Guest').toUpperCase()) + '</div></div>' +
         '<div class="mcSince"><div class="mcLab">Since</div><div class="mcName" style="font-size:0.78rem">' + sinceLabel(mySince) + '</div>' +
         '<div class="mcSuits">&#9824; &#9829; &#9830; &#9827;</div></div></div>';
-    var el = $('memberCard');
-    el.innerHTML = html;
     if (animate) { el.classList.remove('reveal'); void el.offsetWidth; el.classList.add('reveal'); }
   }
   function updateCageUI() {
@@ -708,13 +736,21 @@ var BJ = (function () {
   var overlayOpen = true, lobbyTimer = null;
   function setView(which) {
     $('joinOverlay').style.display = 'flex';
+    $('welcomeView').style.display = which === 'welcome' ? 'block' : 'none';
     $('onboardView').style.display = which === 'onboard' ? 'block' : 'none';
     $('cardView').style.display = which === 'card' ? 'block' : 'none';
     $('lobbyView').style.display = which === 'lobby' ? 'block' : 'none';
+    $('accountView').style.display = which === 'account' ? 'block' : 'none';
+  }
+  function stopLobbyTimer() { if (lobbyTimer) { clearInterval(lobbyTimer); lobbyTimer = null; } }
+  function showWelcome(msg) {
+    overlayOpen = true; stopLobbyTimer();
+    $('welErr').textContent = msg || '';
+    renderMemberCard('welcomeCard', 'Your Name', true);
+    setView('welcome');
   }
   function showOnboarding() {
-    overlayOpen = true;
-    if (lobbyTimer) { clearInterval(lobbyTimer); lobbyTimer = null; }
+    overlayOpen = true; stopLobbyTimer();
     $('obName').value = myName || '';
     setView('onboard');
   }
@@ -731,8 +767,32 @@ var BJ = (function () {
     $('cardCheckWrap').style.display = signup ? 'flex' : 'none';
     $('obContinue').textContent = signup ? 'Continue to the tables →' : 'Enter the casino →';
     $('obContinue').disabled = signup ? !$('obSaved').checked : false;
-    renderMemberCard(name, true);
+    renderMemberCard('memberCard', name, true);
     setView('card');
+  }
+  function showAccount() {
+    overlayOpen = true; stopLobbyTimer();
+    renderMemberCard('acctCard', myName, true);
+    $('acctCash').textContent = cageCash === null ? '—' : fmt(cageCash);
+    $('acctTier').textContent = myTier || 'Bronze';
+    $('acctComp').textContent = Math.round(myComp || 0);
+    $('acctNo').textContent = '#' + myNo; $('acctPin').textContent = myPin;
+    $('acctHist').innerHTML = '<div style="padding:12px; color:var(--muted); text-align:center">Loading…</div>';
+    setView('account');
+    fetch('/api/my-history', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: token }) })
+      .then(function (r) { return r.json(); }).then(function (d) {
+        if (d.error || !d.transactions) { $('acctHist').innerHTML = '<div style="padding:12px; color:var(--muted); text-align:center">No activity yet.</div>'; return; }
+        if (typeof d.account === 'object' && d.account) { cageCash = d.account.cash; myComp = d.account.compPoints; myTier = d.account.tier; updateCageUI(); $('acctCash').textContent = fmt(d.account.cash); $('acctComp').textContent = Math.round(d.account.compPoints); $('acctTier').textContent = d.account.tier; }
+        var rows = d.transactions.map(function (t) {
+          var amt = Number(t.amount), cls = amt > 0 ? 'win' : (amt < 0 ? 'lose' : '');
+          var when = ''; try { when = new Date(t.created_at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }); } catch (e) {}
+          var label = { buyin: 'Bought chips', cashout: 'Cashed out', rebuy: 'Rebuy', admin_credit: 'Credit (house)', admin_dock: 'Dock (house)', comp: 'Cage comp' }[t.type] || t.type;
+          return '<div style="display:flex; justify-content:space-between; padding:6px 10px; border-bottom:1px solid var(--line)">' +
+            '<span>' + esc(label) + ' <span style="color:var(--muted); font-size:0.7rem">' + when + '</span></span>' +
+            '<span class="res ' + cls + '">' + (amt > 0 ? '+' : '') + fmt(amt) + '</span></div>';
+        }).join('');
+        $('acctHist').innerHTML = rows || '<div style="padding:12px; color:var(--muted); text-align:center">No cage activity yet.</div>';
+      }).catch(function () { $('acctHist').innerHTML = '<div style="padding:12px; color:var(--muted); text-align:center">Could not load history.</div>'; });
   }
   function showLobby(msg) {
     overlayOpen = true;
@@ -810,12 +870,30 @@ var BJ = (function () {
     var m = $('moreOptions');
     m.style.display = m.style.display === 'none' ? 'block' : 'none';
   });
-  $('btnShowLogin').addEventListener('click', function () {
-    var b = $('loginBox');
-    b.style.display = b.style.display === 'none' ? 'block' : 'none';
-    if (b.style.display === 'block') $('loginNo').focus();
-  });
   $('btnCreate').addEventListener('click', function () { doJoin('', readConfigForm()); });
+
+  // ----- welcome (fresh visitor) -----
+  $('btnNewAccount').addEventListener('click', function () {
+    $('welErr').textContent = 'Setting up your account…';
+    fetchAccount().then(function () { showOnboarding(); });
+  });
+  $('btnWelLogin').addEventListener('click', function () { doLogin($('welNo').value, $('welPin').value, $('welErr')); });
+  $('welPin').addEventListener('keydown', function (e) { if (e.key === 'Enter') doLogin($('welNo').value, $('welPin').value, $('welErr')); });
+  $('welNo').addEventListener('keydown', function (e) { if (e.key === 'Enter') $('welPin').focus(); });
+
+  // ----- account page + logout -----
+  $('btnAccount').addEventListener('click', showAccount);
+  $('btnAcctBack').addEventListener('click', function () { showLobby(''); });
+  $('btnLogout').addEventListener('click', function () {
+    function finish() {
+      wsDrop(); myId = null; room = ''; token = ''; myName = ''; myNo = ''; myPin = '';
+      cageCash = null; myTier = 'Bronze'; myComp = 0; S = null;
+      try { localStorage.removeItem('t7-token'); localStorage.removeItem('t7-id'); } catch (e) {}
+      try { history.replaceState(null, '', '/play'); } catch (e) {}
+      showWelcome('Logged out. See you next time.');
+    }
+    if (myId) { api('/api/leave').then(finish).catch(finish); } else finish();
+  });
 
   // onboarding step 1 → print the card
   $('obMakeCard').addEventListener('click', function () {
@@ -837,28 +915,29 @@ var BJ = (function () {
   $('obSaved').addEventListener('change', function () { $('obContinue').disabled = !this.checked; });
   $('obContinue').addEventListener('click', function () { newAccount = false; showLobby(''); });
 
-  function doLogin() {
-    var no = $('loginNo').value.replace(/\D/g, '');
-    var pin = $('loginPin').value.replace(/\D/g, '');
-    if (!no || !pin) { $('joinErr').textContent = 'Enter your Player # and PIN.'; return; }
-    $('joinErr').textContent = 'Checking the cage…';
+  function doLogin(noVal, pinVal, errEl) {
+    errEl = errEl || $('joinErr');
+    var no = String(noVal || '').replace(/\D/g, '');
+    var pin = String(pinVal || '').replace(/\D/g, '');
+    if (!no || !pin) { errEl.textContent = 'Enter your Player # and PIN.'; return; }
+    errEl.textContent = 'Checking the cage…';
     fetch('/api/login', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ number: no, pin: pin, discard: token })
     }).then(function (r) { return r.json(); }).then(function (res) {
-      if (res.error) { $('joinErr').textContent = res.error; return; }
+      if (res.error) { errEl.textContent = res.error; return; }
       token = res.token; cageCash = res.cash; myNo = res.no; myPin = res.pin;
       if (res.name) { myName = res.name; $('joinName').value = res.name; }
       if (res.tier) myTier = res.tier; if (res.since) mySince = res.since;
       if (typeof res.compPoints === 'number') myComp = res.compPoints;
+      newAccount = false;
       try { localStorage.setItem('t7-token', token); } catch (e) {}
-      $('loginNo').value = ''; $('loginPin').value = '';
+      if ($('welNo')) { $('welNo').value = ''; $('welPin').value = ''; }
+      errEl.textContent = '';
       updateCageUI();
       showCardView('login', myName);  // welcome-back card reveal
-    }).catch(function () { $('joinErr').textContent = 'Could not reach the cage.'; });
+    }).catch(function () { errEl.textContent = 'Could not reach the cage.'; });
   }
-  $('btnLogin').addEventListener('click', doLogin);
-  $('loginPin').addEventListener('keydown', function (e) { if (e.key === 'Enter') doLogin(); });
 
   // ---------- live connection ----------
   var ws = null, wsUp = false, wsRetry = 800;
@@ -1249,12 +1328,20 @@ var BJ = (function () {
   }
   fetch('/api/info').then(function (r) { return r.json(); }).then(function (info) { lanInfo = info; updateShareBox(); }).catch(function () {});
 
-  fetchAccount().then(function () {
-    if (myId && room) { wsConnect(); hideLobby(); }
-    else if (newAccount) { showOnboarding(); }
-    else { showLobby(''); }
+  // Fresh visitors (no saved account) choose their path instead of being forced
+  // into naming a new card. Returning visitors (token in this browser) load
+  // their account and land in the lobby (or reconnect to their live table).
+  if (token) {
+    fetchAccount().then(function () {
+      if (myId && room) { wsConnect(); hideLobby(); }
+      else if (newAccount) { showOnboarding(); } // stale token → server made a fresh account
+      else { showLobby(''); }
+      poll();
+    });
+  } else {
+    showWelcome('');
     poll();
-  });
+  }
 })();
 </script>
 
