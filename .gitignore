@@ -3,6 +3,7 @@
 # Everything below is unrelated local work — keep it out of the deploy repo.
 cage-data.json
 cage-history.json
+cage-admins.json
 web/
 recon/
 docker-compose.yml

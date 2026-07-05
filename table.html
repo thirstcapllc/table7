@@ -203,6 +203,46 @@
   .obcheck input { width: auto; }
   .finelegal { text-align: center; font-size: 0.68rem; color: var(--muted); margin-top: 14px; }
   .finelegal a { color: var(--gold-dim); }
+  /* digital players / membership card */
+  .cardStage { perspective: 1000px; margin: 12px auto 8px; max-width: 340px; }
+  .memberCard {
+    position: relative; width: 100%; aspect-ratio: 1.585 / 1; border-radius: 16px;
+    padding: 16px 18px; color: #f6efda; overflow: hidden;
+    background:
+      radial-gradient(120% 140% at 0% 0%, rgba(212,175,55,0.22), transparent 45%),
+      linear-gradient(135deg, #17603f 0%, #0d2a1c 55%, #191207 100%);
+    border: 1px solid rgba(212,175,55,0.55);
+    box-shadow: 0 16px 44px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.12);
+    transform-style: preserve-3d;
+  }
+  .memberCard.reveal { animation: cardIn 0.9s cubic-bezier(0.2, 0.75, 0.3, 1) both; }
+  @keyframes cardIn {
+    0% { transform: rotateY(85deg) translateY(10px) scale(0.9); opacity: 0; }
+    60% { opacity: 1; }
+    100% { transform: none; opacity: 1; }
+  }
+  .memberCard::after {
+    content: ''; position: absolute; top: 0; left: -60%; width: 45%; height: 100%;
+    background: linear-gradient(100deg, transparent, rgba(255,255,255,0.28), transparent);
+    transform: skewX(-18deg); animation: cardShine 3.2s ease-in-out 0.7s infinite;
+  }
+  @keyframes cardShine { 0% { left: -60%; } 45%, 100% { left: 130%; } }
+  .mcRow { display: flex; justify-content: space-between; align-items: center; position: relative; z-index: 2; }
+  .mcBrand { font-family: Georgia, serif; letter-spacing: 3px; color: var(--gold); font-weight: bold; font-size: 0.9rem; }
+  .mcTier { font-family: Verdana, sans-serif; font-size: 0.62rem; font-weight: bold; letter-spacing: 2px;
+    padding: 3px 9px; border-radius: 20px; border: 1px solid currentColor; }
+  .mcTier.Bronze { color: #d69a63; } .mcTier.Silver { color: #cfd6dd; } .mcTier.Gold { color: #f0d778; } .mcTier.Platinum { color: #eef0f2; }
+  .mcChip { width: 42px; height: 30px; border-radius: 6px; margin: 12px 0 8px; position: relative; z-index: 2;
+    background: linear-gradient(135deg, #f0d778, #b8902a); box-shadow: inset 0 0 0 1px rgba(0,0,0,0.25); }
+  .mcChip::before, .mcChip::after { content: ''; position: absolute; left: 4px; right: 4px; height: 1px; background: rgba(0,0,0,0.3); }
+  .mcChip::before { top: 10px; } .mcChip::after { top: 20px; }
+  .mcNo { font-family: 'Courier New', monospace; font-size: 1.25rem; letter-spacing: 4px; color: #f6efda; position: relative; z-index: 2;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.5); }
+  .mcBottom { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 8px; position: relative; z-index: 2; }
+  .mcName { font-family: Verdana, sans-serif; text-transform: uppercase; letter-spacing: 2px; font-size: 0.9rem; color: #fff; }
+  .mcLab { font-size: 0.56rem; color: rgba(246,239,218,0.6); letter-spacing: 1px; text-transform: uppercase; }
+  .mcSince { text-align: right; }
+  .mcSuits { color: rgba(212,175,55,0.5); letter-spacing: 4px; font-size: 0.8rem; }
   .away { color: #e07a5f !important; }
   #chipRack { text-align: center; margin: 6px 0 2px; font-size: 0.78rem; color: var(--muted); min-height: 0; }
   #chipRack .chipstack { vertical-align: bottom; margin: 0 2px; }
@@ -243,22 +283,31 @@
 <div id="joinOverlay">
   <div class="lobbyCard">
 
-    <!-- First-time players: welcome + save your login -->
+    <!-- First-time players, step 1: welcome + name -->
     <div id="onboardView" style="display:none">
       <h2>WELCOME</h2>
       <div class="sub">you just walked up to the cage</div>
       <p class="obline" style="margin-top:14px">The house staked you <b id="obCash" style="color:var(--gold)">$1,000</b> in <b>play money</b> — all for fun, no real cash, nothing to lose.</p>
-      <p class="obline">This is your table account:</p>
-      <div class="credBox">
+      <label class="fld">What should we print on your players card?</label>
+      <input id="obName" maxlength="14" placeholder="Your name" autocomplete="off">
+      <button class="primary" id="obMakeCard" style="width:100%; margin-top:10px">Print my players card &rarr;</button>
+      <p class="finelegal">Free play &middot; fake money &middot; <a href="/privacy.html">Privacy</a> &middot; <a href="/terms.html">Terms</a></p>
+    </div>
+
+    <!-- First-time players, step 2: the members card reveal -->
+    <div id="cardView" style="display:none">
+      <h2 id="cardHeading">YOUR PLAYERS CARD</h2>
+      <div class="sub" id="cardSub">welcome to the club</div>
+      <div class="cardStage"><div class="memberCard" id="memberCard"></div></div>
+      <div class="credBox" id="cardCreds" style="margin-top:16px">
         <div class="credRow"><span class="credLab">Player #</span><span class="credVal" id="obNo">&mdash;</span></div>
         <div class="credRow"><span class="credLab">PIN</span><span class="credVal" id="obPin">&mdash;</span></div>
         <button id="obCopy" class="linkbtn" style="display:block; margin:8px auto 0">&#128203; Copy my login</button>
         <div id="obCopyMsg" class="copymsg"></div>
       </div>
-      <p class="obwarn">Save these somewhere! They're the <b>only way back into your account</b> if your browser clears or you switch devices — nobody can recover them for you.</p>
-      <label class="obcheck"><input type="checkbox" id="obSaved"> I've saved my Player&nbsp;# and PIN</label>
+      <p class="obwarn" id="cardWarn">Save your Player&nbsp;# and PIN! They're the <b>only way back into your account</b> if your browser clears or you switch devices — nobody can recover them for you.</p>
+      <label class="obcheck" id="cardCheckWrap"><input type="checkbox" id="obSaved"> I've saved my Player&nbsp;# and PIN</label>
       <button class="primary" id="obContinue" style="width:100%" disabled>Continue to the tables &rarr;</button>
-      <p class="finelegal">Free play &middot; fake money &middot; <a href="/privacy.html">Privacy</a> &middot; <a href="/terms.html">Terms</a></p>
     </div>
 
     <!-- Returning players / after onboarding: the lobby -->
@@ -300,6 +349,10 @@
                 <select id="cfgDas"><option value="1" selected>Allowed</option><option value="0">Not allowed</option></select></div>
               <div><label class="fld">Surrender</label>
                 <select id="cfgSurr"><option value="0" selected>No</option><option value="1">Late surrender</option></select></div>
+              <div><label class="fld">Min bet</label>
+                <select id="cfgMin"><option>1</option><option selected>5</option><option>10</option><option>25</option><option>100</option></select></div>
+              <div><label class="fld">Max bet</label>
+                <select id="cfgMax"><option>100</option><option>250</option><option selected>500</option><option>1000</option><option>2500</option><option>5000</option></select></div>
             </div>
             <button class="primary" id="btnCreate" style="width:100%; margin-top:12px">Open table &amp; sit as host</button>
           </div>
@@ -358,6 +411,8 @@
       <label>Soft 17 <select id="edH17"><option value="1">Hit</option><option value="0">Stand</option></select></label>
       <label>DAS <select id="edDas"><option value="1">Yes</option><option value="0">No</option></select></label>
       <label>Surrender <select id="edSurr"><option value="0">No</option><option value="1">Yes</option></select></label>
+      <label>Min <select id="edMin"><option>1</option><option>5</option><option>10</option><option>25</option><option>100</option></select></label>
+      <label>Max <select id="edMax"><option>100</option><option>250</option><option>500</option><option>1000</option><option>2500</option><option>5000</option></select></label>
       <label>Listed <select id="edPublic"><option value="1">Public</option><option value="0">Private</option></select></label>
       <button class="primary" id="btnApplyRules">Apply</button>
     </div>
@@ -505,6 +560,7 @@ var BJ = (function () {
   var token = '';
   try { token = localStorage.getItem('t7-token') || ''; } catch (e) {}
   var cageCash = null, myNo = '', myPin = '', newAccount = false;
+  var myTier = 'Bronze', mySince = '', myComp = 0;
   var stats = { decisions: 0, correct: 0 };
   try { stats = JSON.parse(localStorage.getItem('t7-stats')) || stats; } catch (e) {}
 
@@ -575,6 +631,8 @@ var BJ = (function () {
       token = acc.token; cageCash = acc.cash;
       if (acc.no) myNo = acc.no; if (acc.pin) myPin = acc.pin;
       if (acc.name && !myName) myName = acc.name;
+      if (acc.tier) myTier = acc.tier; if (acc.since) mySince = acc.since;
+      if (typeof acc.compPoints === 'number') myComp = acc.compPoints;
       newAccount = !!acc.created;
       try { localStorage.setItem('t7-token', token); } catch (e) {}
       if (newAccount) {
@@ -587,10 +645,34 @@ var BJ = (function () {
       updateCageUI();
     }).catch(function () {});
   }
+
+  // ---------- digital players card ----------
+  function sinceLabel(iso) {
+    if (!iso) return new Date().getFullYear();
+    try { var d = new Date(iso); return d.toLocaleDateString(undefined, { month: 'short', year: 'numeric' }); }
+    catch (e) { return ''; }
+  }
+  function renderMemberCard(name, animate) {
+    var tier = myTier || 'Bronze';
+    var no = String(myNo || '').replace(/(\d{3})(\d{3})/, '$1 $2');
+    var html =
+      '<div class="mcRow"><span class="mcBrand">&#9824; TABLE SEVEN</span>' +
+        '<span class="mcTier ' + tier + '">' + tier.toUpperCase() + '</span></div>' +
+      '<div class="mcChip"></div>' +
+      '<div class="mcNo">' + (no || '— — —') + '</div>' +
+      '<div class="mcBottom"><div><div class="mcLab">Member</div>' +
+        '<div class="mcName">' + esc((name || myName || 'Guest').toUpperCase()) + '</div></div>' +
+        '<div class="mcSince"><div class="mcLab">Since</div><div class="mcName" style="font-size:0.78rem">' + sinceLabel(mySince) + '</div>' +
+        '<div class="mcSuits">&#9824; &#9829; &#9830; &#9827;</div></div></div>';
+    var el = $('memberCard');
+    el.innerHTML = html;
+    if (animate) { el.classList.remove('reveal'); void el.offsetWidth; el.classList.add('reveal'); }
+  }
   function updateCageUI() {
     $('cageLine').innerHTML = 'CAGE BALANCE: <b>' + (cageCash === null ? '—' : fmt(cageCash)) + '</b>';
-    if (myNo) $('loginInfo').innerHTML = 'Player <b>#' + myNo + '</b> &middot; PIN <b>' + myPin +
-      '</b> <span class="save">— write these down to log back in on any device.</span>';
+    if (myNo) $('loginInfo').innerHTML = 'Player <b>#' + myNo + '</b> &middot; ' +
+      '<b style="color:var(--gold)">' + (myTier || 'Bronze') + '</b> member &middot; ' +
+      Math.round(myComp || 0) + ' comp pts';
     $('stCage').textContent = cageCash === null ? '—' : fmt(cageCash);
     var sel = $('buyIn');
     for (var i = 0; i < sel.options.length; i++)
@@ -624,19 +706,38 @@ var BJ = (function () {
 
   // ---------- lobby + onboarding ----------
   var overlayOpen = true, lobbyTimer = null;
+  function setView(which) {
+    $('joinOverlay').style.display = 'flex';
+    $('onboardView').style.display = which === 'onboard' ? 'block' : 'none';
+    $('cardView').style.display = which === 'card' ? 'block' : 'none';
+    $('lobbyView').style.display = which === 'lobby' ? 'block' : 'none';
+  }
   function showOnboarding() {
     overlayOpen = true;
-    $('joinOverlay').style.display = 'flex';
-    $('onboardView').style.display = 'block';
-    $('lobbyView').style.display = 'none';
     if (lobbyTimer) { clearInterval(lobbyTimer); lobbyTimer = null; }
+    $('obName').value = myName || '';
+    setView('onboard');
+  }
+  // the members-card reveal — used both after signup (gated Continue) and on
+  // login (a "welcome back" flash straight into the lobby)
+  function showCardView(mode, name) {
+    overlayOpen = true;
+    if (lobbyTimer) { clearInterval(lobbyTimer); lobbyTimer = null; }
+    var signup = mode === 'signup';
+    $('cardHeading').textContent = signup ? 'YOUR PLAYERS CARD' : 'WELCOME BACK';
+    $('cardSub').textContent = signup ? 'welcome to the club — this is you' : (name || myName || '') + ' · ' + (myTier || 'Bronze') + ' member';
+    $('cardCreds').style.display = signup ? 'block' : 'none';
+    $('cardWarn').style.display = signup ? 'block' : 'none';
+    $('cardCheckWrap').style.display = signup ? 'flex' : 'none';
+    $('obContinue').textContent = signup ? 'Continue to the tables →' : 'Enter the casino →';
+    $('obContinue').disabled = signup ? !$('obSaved').checked : false;
+    renderMemberCard(name, true);
+    setView('card');
   }
   function showLobby(msg) {
     overlayOpen = true;
-    $('onboardView').style.display = 'none';
-    $('lobbyView').style.display = 'block';
     $('joinName').value = myName || '';
-    $('joinOverlay').style.display = 'flex';
+    setView('lobby');
     if (msg) $('joinErr').textContent = msg;
     refreshLobby();
     if (!lobbyTimer) lobbyTimer = setInterval(refreshLobby, 3000);
@@ -673,7 +774,9 @@ var BJ = (function () {
       decks: Number($('cfgDecks').value),
       h17: $('cfgH17').value === '1',
       das: $('cfgDas').value === '1',
-      surrender: $('cfgSurr').value === '1'
+      surrender: $('cfgSurr').value === '1',
+      minBet: Number($('cfgMin').value),
+      maxBet: Number($('cfgMax').value)
     };
   }
 
@@ -714,7 +817,16 @@ var BJ = (function () {
   });
   $('btnCreate').addEventListener('click', function () { doJoin('', readConfigForm()); });
 
-  // onboarding: copy login, gate Continue on the "I saved it" checkbox
+  // onboarding step 1 → print the card
+  $('obMakeCard').addEventListener('click', function () {
+    var name = $('obName').value.trim();
+    if (!name) { $('obName').focus(); return; }
+    myName = name;
+    showCardView('signup', name);
+  });
+  $('obName').addEventListener('keydown', function (e) { if (e.key === 'Enter') $('obMakeCard').click(); });
+
+  // members card: copy login, gate Continue on the "I saved it" checkbox
   $('obCopy').addEventListener('click', function () {
     var text = 'TABLE SEVEN login — Player #' + myNo + ', PIN ' + myPin;
     function done() { $('obCopyMsg').textContent = '✓ Copied — paste it somewhere safe.'; }
@@ -737,10 +849,12 @@ var BJ = (function () {
       if (res.error) { $('joinErr').textContent = res.error; return; }
       token = res.token; cageCash = res.cash; myNo = res.no; myPin = res.pin;
       if (res.name) { myName = res.name; $('joinName').value = res.name; }
+      if (res.tier) myTier = res.tier; if (res.since) mySince = res.since;
+      if (typeof res.compPoints === 'number') myComp = res.compPoints;
       try { localStorage.setItem('t7-token', token); } catch (e) {}
-      $('joinErr').textContent = 'Welcome back, Player #' + myNo + ' — cage balance ' + fmt(cageCash) + '.';
       $('loginNo').value = ''; $('loginPin').value = '';
       updateCageUI();
+      showCardView('login', myName);  // welcome-back card reveal
     }).catch(function () { $('joinErr').textContent = 'Could not reach the cage.'; });
   }
   $('btnLogin').addEventListener('click', doLogin);
@@ -794,6 +908,7 @@ var BJ = (function () {
     if (S.noRoom) { backToLobby(myId ? 'That table closed — pick another.' : ''); return; }
     if (S.room && S.room !== room) { room = S.room; updateShareBox(); }
     if (S.cage && typeof S.cage.cash === 'number' && S.cage.cash !== cageCash) { cageCash = S.cage.cash; updateCageUI(); }
+    if (S.cage && typeof S.cage.compPoints === 'number') { myComp = S.cage.compPoints; if (S.cage.tier) myTier = S.cage.tier; }
     if (!S.you) { backToLobby(myId ? 'You left the table.' : ''); return; }
     hideLobby();
 
@@ -925,7 +1040,7 @@ var BJ = (function () {
     if (S.rules) $('rulesChip').innerHTML = '<b>House rules:</b> ' + esc(S.rules);
     if (S.config) {
       $('placard').innerHTML = 'TABLE ' + (S.room || '') + '<br>BLACKJACK PAYS ' + S.config.payout +
-        '<br>MIN $5 — MAX $500';
+        '<br>MIN $' + S.config.minBet + ' — MAX $' + S.config.maxBet;
       $('arcMainText').textContent = 'BLACKJACK PAYS ' + (S.config.payout === '6:5' ? '6 TO 5' : '3 TO 2');
       $('arcSubText').textContent = 'INSURANCE PAYS 2 TO 1 • DEALER ' + (S.config.h17 ? 'MUST HIT' : 'STANDS ON') + ' SOFT 17';
     }
@@ -1069,6 +1184,7 @@ var BJ = (function () {
       $('edPayout').value = S.config.payout; $('edDecks').value = String(S.config.decks);
       $('edH17').value = S.config.h17 ? '1' : '0'; $('edDas').value = S.config.das ? '1' : '0';
       $('edSurr').value = S.config.surrender ? '1' : '0'; $('edPublic').value = S.config.public ? '1' : '0';
+      $('edMin').value = String(S.config.minBet); $('edMax').value = String(S.config.maxBet);
     }
     ed.style.display = 'flex';
   });
@@ -1076,7 +1192,8 @@ var BJ = (function () {
     api('/api/room/config', { config: {
       payout: $('edPayout').value, decks: Number($('edDecks').value),
       h17: $('edH17').value === '1', das: $('edDas').value === '1',
-      surrender: $('edSurr').value === '1', public: $('edPublic').value === '1'
+      surrender: $('edSurr').value === '1', public: $('edPublic').value === '1',
+      minBet: Number($('edMin').value), maxBet: Number($('edMax').value)
     } }).then(function (res) { if (res.error) $('message').textContent = res.error; else $('ruleEditor').style.display = 'none'; });
   });
 

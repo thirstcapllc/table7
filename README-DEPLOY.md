@@ -17,9 +17,13 @@ strangers who find the site can't wander into your game.
 - **The lobby** lists open public tables (host, seats, rules) — click to sit.
   Private tables are hidden and joined only by their code.
 - **The host** is the first human to sit at a table. Only the host can add/remove
-  bots and change the house rules (between hands): blackjack payout **3:2 or 6:5**,
-  number of **decks** (1/2/4/6/8), dealer **hits or stands soft 17**, **double
-  after split** on/off, and **late surrender** on/off.
+  bots and change the house rules (between hands): **table min/max bets**,
+  blackjack payout **3:2 or 6:5**, number of **decks** (1/2/4/6/8), dealer
+  **hits or stands soft 17**, **double after split** on/off, and **late
+  surrender** on/off.
+- **Comps & membership**: players earn 1 comp point per $1 wagered, which sets
+  a membership tier (Bronze → Silver → Gold → Platinum) shown on their animated
+  digital players card at signup/login and in the admin console.
 - **Bots** fill empty seats and play themselves — "book" bots play perfect basic
   strategy, "loose" bots make tourist mistakes. They use house money, never the cage.
 - **Cash out** any time from the betting screen (or after a hand) — you drop back
@@ -70,16 +74,21 @@ Suggested subdomain: **table7.yourdomain.com** (short, on-brand).
 
 ## The Pit Boss console
 
-`/admin` is the house control room: see every cage account and open table,
-credit or dock cage cash, reset a forgotten PIN, delete accounts, and view a
-full **History** per account (every buy-in, cash-out, rebuy, admin adjustment,
-and hand-by-hand result). It's protected by a key:
+`/admin` is the house control room: see every cage account (Player #, name,
+membership tier, comp points, cash), credit or dock cage cash, reset a
+forgotten PIN, delete accounts, and view a full **History** per account (every
+buy-in, cash-out, rebuy, admin adjustment, and hand-by-hand result).
 
-- Locally the key is printed in the server console at every start.
-- For a permanent key (do this on Railway): set the `TABLE_ADMIN_KEY`
-  environment variable in your service settings, then open
-  `https://table7.yourdomain.com/admin` and enter it once — it's remembered
-  in that browser.
+Two ways to sign in:
+
+- **Owner** — the `TABLE_ADMIN_KEY` env var (printed in the server console if
+  unset). The owner can do everything, including managing staff, and can never
+  be locked out. Set `TABLE_ADMIN_KEY` in Railway's service Variables for a
+  permanent owner key.
+- **Staff** — the owner adds staff admins (username + password, stored hashed
+  in the DB) in the console's Staff section. Staff can run the pit (credit,
+  reset PINs, view history) but can't manage other staff. Logins are
+  session-based (8-hour sessions), so nothing sensitive is stored in the browser.
 
 ## Good to know
 

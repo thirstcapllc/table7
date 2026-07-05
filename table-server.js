@@ -47,11 +47,49 @@ const ROOT = __dirname;
 // otherwise a fresh one is generated and printed at boot.
 const ADMIN_KEY = process.env.TABLE_ADMIN_KEY || crypto.randomBytes(6).toString('hex');
 
-function isAdmin(key) {
+// The owner master key (env TABLE_ADMIN_KEY) always unlocks and can manage
+// staff. Staff admins are username+password rows in the DB (see admins map).
+function isMasterKey(key) {
   const a = crypto.createHash('sha256').update(String(key || '')).digest();
   const b = crypto.createHash('sha256').update(ADMIN_KEY).digest();
   return crypto.timingSafeEqual(a, b);
 }
+
+// ----- staff admin accounts + sessions -----
+const admins = new Map();   // username -> { hash, salt }
+const adminSessions = new Map(); // sessionToken -> { who, isOwner, expiresAt }
+const ADMIN_SESSION_MS = 8 * 60 * 60 * 1000;
+
+function hashPassword(password, salt) {
+  salt = salt || crypto.randomBytes(16).toString('hex');
+  const hash = crypto.scryptSync(String(password), salt, 32).toString('hex');
+  return { hash, salt };
+}
+function verifyPassword(password, rec) {
+  if (!rec || !rec.salt || !rec.hash) return false;
+  const a = Buffer.from(crypto.scryptSync(String(password), rec.salt, 32).toString('hex'));
+  const b = Buffer.from(rec.hash);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+function newSession(who, isOwner) {
+  const t = crypto.randomBytes(24).toString('hex');
+  adminSessions.set(t, { who, isOwner, expiresAt: Date.now() + ADMIN_SESSION_MS });
+  return t;
+}
+// returns the session record if the request carries a valid session token OR
+// the owner master key; else null
+function adminAuth(body) {
+  if (body && body.session) {
+    const s = adminSessions.get(String(body.session));
+    if (s && s.expiresAt > Date.now()) return s;
+  }
+  if (body && body.key && isMasterKey(body.key)) return { who: 'owner', isOwner: true, expiresAt: Infinity };
+  return null;
+}
+setInterval(() => {
+  const now = Date.now();
+  for (const [t, s] of adminSessions) if (s.expiresAt < now) adminSessions.delete(t);
+}, 10 * 60000).unref();
 
 // ---------- blackjack engine ----------
 const SUITS = ['♠', '♥', '♦', '♣'];
@@ -145,15 +183,30 @@ async function initStore() {
   const loaded = await STORE.init();
   for (const [token, acc] of loaded) accounts.set(token, acc);
   for (const [token, acc] of accounts) if (acc.no) byNumber.set(acc.no, token);
-  // back-fill player numbers/PINs for accounts created before this feature existed
+  // back-fill fields for accounts created before those features existed
   const toPersist = [];
   for (const [token, acc] of accounts) {
     let changed = false;
     if (!acc.no) { acc.no = newPlayerNo(); byNumber.set(acc.no, token); changed = true; }
     if (!acc.pin) { acc.pin = newPin(); changed = true; }
+    if (typeof acc.compPoints !== 'number') { acc.compPoints = 0; changed = true; }
     if (changed) toPersist.push(token);
   }
   for (const token of toPersist) await persistAccount(token);
+  // load staff admin logins
+  try {
+    for (const a of await STORE.getAdmins()) admins.set(a.username, { hash: a.hash, salt: a.salt });
+  } catch (e) { console.error('[store] getAdmins failed:', e.message || e); }
+  console.log('  Staff admins: ' + admins.size + (admins.size ? '' : ' (owner master key only until you add one)'));
+}
+
+// membership tier from lifetime comp points
+function compTier(points) {
+  points = points || 0;
+  if (points >= 5000) return 'Platinum';
+  if (points >= 1500) return 'Gold';
+  if (points >= 400) return 'Silver';
+  return 'Bronze';
 }
 
 // Fire-and-forget writers: they never throw, so callers may await them (for
@@ -179,7 +232,7 @@ function getAccount(token) {
   let created = false, comped = false;
   if (!acc) {
     token = crypto.randomBytes(12).toString('hex');
-    acc = { name: '', cash: START_CASH, comps: 0, no: newPlayerNo(), pin: newPin() };
+    acc = { name: '', cash: START_CASH, comps: 0, compPoints: 0, since: new Date().toISOString(), no: newPlayerNo(), pin: newPin() };
     accounts.set(token, acc);
     byNumber.set(acc.no, token);
     created = true;
@@ -211,18 +264,26 @@ function newCode() {
 function sanitizeConfig(c) {
   c = c || {};
   const decks = [1, 2, 4, 6, 8].includes(+c.decks) ? +c.decks : 6;
+  // table limits: min $1–$500, max min–$5,000, both multiples of $1
+  let minBet = Math.round(Number(c.minBet));
+  let maxBet = Math.round(Number(c.maxBet));
+  if (!(minBet >= 1 && minBet <= 500)) minBet = 5;
+  if (!(maxBet >= minBet && maxBet <= 5000)) maxBet = Math.max(minBet, 500);
   return {
     public: c.public !== false,
     decks: decks,
     payout: c.payout === '6:5' ? '6:5' : '3:2',
     h17: c.h17 !== false,     // dealer hits soft 17 (default true — most Vegas)
     das: c.das !== false,     // double after split allowed
-    surrender: !!c.surrender  // late surrender
+    surrender: !!c.surrender, // late surrender
+    minBet: minBet,
+    maxBet: maxBet
   };
 }
 
 function rulesLine(cfg) {
   return [
+    '$' + cfg.minBet + '–$' + cfg.maxBet,
     cfg.decks + ' decks',
     'blackjack pays ' + cfg.payout,
     'dealer ' + (cfg.h17 ? 'hits' : 'stands') + ' soft 17',
@@ -362,7 +423,10 @@ function removeBot(g, botId) {
 function setBotBet(g, bot) {
   if (bot.bankroll < 50) bot.bankroll = 1000; // house keeps bots stocked
   const base = bot.botStyle === 'gut' ? 15 : 25;
-  bot.bet = Math.min(base, bot.bankroll, 500);
+  // bet the base, but never below the table minimum or above the max/bankroll
+  let bet = Math.max(g.config.minBet, base);
+  bet = Math.min(bet, g.config.maxBet, bot.bankroll);
+  bot.bet = bet;
 }
 
 function placeBotBets(g) {
@@ -410,7 +474,8 @@ function botStep(g, botId, token) {
 
 // ---------- round flow ----------
 function startRound(g, starter) {
-  const bs = g.players.filter(p => p.bet >= 5 && p.bet <= p.bankroll);
+  const lo = g.config.minBet;
+  const bs = g.players.filter(p => p.bet >= lo && p.bet <= p.bankroll);
   if (!bs.length) return 'No bets on the felt yet.';
   if (g.shoe.length < decks(g) * 15 + 12) {
     g.shoe = buildShoe(decks(g));
@@ -420,7 +485,7 @@ function startRound(g, starter) {
   g.dealer = [];
   g.holeHidden = true;
   for (const p of g.players) {
-    if (p.bet >= 5 && p.bet <= p.bankroll) {
+    if (p.bet >= lo && p.bet <= p.bankroll) {
       p.inRound = true;
       p.bankroll -= p.bet;
       p.hands = [{ cards: [], bet: p.bet, done: false, busted: false,
@@ -605,13 +670,24 @@ function handPayout(h) {
 }
 
 // runs once per round, right after every hand is settled: logs game history
-// for humans and cashes out anyone who asked to leave mid-hand
+// for humans, awards comp points for what they wagered, and cashes out anyone
+// who asked to leave mid-hand
 function finishSettle(g) {
   for (const p of bettors(g)) {
     if (p.isBot) continue;
+    let wagered = 0;
     for (const h of p.hands) {
       if (!h.settled) continue;
+      wagered += h.bet;
       recordHand({ token: p.token, tableCode: g.code, round: g.round, bet: h.bet, result: h.result, payout: handPayout(h) });
+    }
+    if (wagered > 0) {
+      const acc = accounts.get(p.token);
+      if (acc) {
+        acc.compPoints = (acc.compPoints || 0) + wagered; // 1 comp point per $1 wagered
+        p.compPoints = acc.compPoints;
+        persistAccount(p.token);
+      }
     }
   }
   const leaving = g.players.filter(p => p.leaveAfter);
@@ -821,7 +897,7 @@ function snapshot(g, youId) {
   };
   if (you && !you.isBot) {
     const acc = accounts.get(you.token);
-    if (acc) snap.cage = { cash: acc.cash };
+    if (acc) snap.cage = { cash: acc.cash, compPoints: acc.compPoints || 0, tier: compTier(acc.compPoints) };
   }
   return snap;
 }
@@ -1059,28 +1135,83 @@ const server = http.createServer(async (req, res) => {
       }
       const body = await readBody(req);
 
-      if (p === '/api/admin/overview' || p === '/api/admin/credit' || p === '/api/admin/delete' || p === '/api/admin/resetpin' || p === '/api/admin/history') {
-        if (!isAdmin(body.key)) {
-          await new Promise(r => setTimeout(r, 300));
-          sendJSON(res, 403, { error: 'Wrong pit boss key.' });
+      // ----- admin login: owner master key OR a staff username+password -----
+      if (p === '/api/admin/login') {
+        const username = String(body.username || '').trim();
+        if (username) {
+          const rec = admins.get(username);
+          if (rec && verifyPassword(body.password, rec)) {
+            sendJSON(res, 200, { session: newSession(username, false), who: username, isOwner: false });
+            return;
+          }
+          await new Promise(r => setTimeout(r, 400));
+          sendJSON(res, 403, { error: 'Wrong username or password.' });
           return;
         }
+        if (isMasterKey(body.key)) {
+          sendJSON(res, 200, { session: newSession('owner', true), who: 'owner', isOwner: true });
+          return;
+        }
+        await new Promise(r => setTimeout(r, 400));
+        sendJSON(res, 403, { error: 'Wrong owner key.' });
+        return;
+      }
+
+      if (p.startsWith('/api/admin/')) {
+        const auth = adminAuth(body);
+        if (!auth) {
+          await new Promise(r => setTimeout(r, 300));
+          sendJSON(res, 403, { error: 'Not signed in as an admin.' });
+          return;
+        }
+
+        // ----- staff management (owner only) -----
+        if (p === '/api/admin/staff') {
+          if (!auth.isOwner) { sendJSON(res, 403, { error: 'Only the owner can manage staff.' }); return; }
+          sendJSON(res, 200, { admins: [...admins.keys()].sort(), you: auth.who, isOwner: auth.isOwner });
+          return;
+        }
+        if (p === '/api/admin/add-staff') {
+          if (!auth.isOwner) { sendJSON(res, 403, { error: 'Only the owner can add staff.' }); return; }
+          const username = String(body.username || '').replace(/[^A-Za-z0-9_.-]/g, '').slice(0, 24);
+          const password = String(body.password || '');
+          if (username.length < 3) { sendJSON(res, 400, { error: 'Username needs 3+ letters/numbers.' }); return; }
+          if (password.length < 6) { sendJSON(res, 400, { error: 'Password needs 6+ characters.' }); return; }
+          if (username === 'owner') { sendJSON(res, 400, { error: '"owner" is reserved.' }); return; }
+          const rec = hashPassword(password);
+          admins.set(username, rec);
+          try { await STORE.upsertAdmin(username, rec); } catch (e) { console.error('[store] upsertAdmin failed:', e.message || e); }
+          sendJSON(res, 200, { ok: true });
+          return;
+        }
+        if (p === '/api/admin/remove-staff') {
+          if (!auth.isOwner) { sendJSON(res, 403, { error: 'Only the owner can remove staff.' }); return; }
+          const username = String(body.username || '');
+          if (!admins.has(username)) { sendJSON(res, 400, { error: 'No such staff admin.' }); return; }
+          admins.delete(username);
+          for (const [t, s] of adminSessions) if (s.who === username) adminSessions.delete(t);
+          try { await STORE.deleteAdmin(username); } catch (e) { console.error('[store] deleteAdmin failed:', e.message || e); }
+          sendJSON(res, 200, { ok: true });
+          return;
+        }
+
         if (p === '/api/admin/overview') {
           const seatedAt = {};
           for (const g of rooms.values())
             for (const q of g.players) if (q.token) seatedAt[q.token] = g.code;
           const accs = [...accounts.entries()].map(([token, acc]) => ({
             token, no: acc.no || '—', name: acc.name || '(unnamed)', cash: acc.cash,
-            comps: acc.comps || 0, seated: seatedAt[token] || null
+            comps: acc.comps || 0, compPoints: acc.compPoints || 0, tier: compTier(acc.compPoints),
+            since: acc.since || null, seated: seatedAt[token] || null
           })).sort((x, y) => y.cash - x.cash);
           const tables = [...rooms.values()].map(g => ({
             code: g.code, phase: g.phase, round: g.round,
-            public: g.config.public, payout: g.config.payout,
+            public: g.config.public, payout: g.config.payout, rules: rulesLine(g.config),
             players: g.players.map(q => ({
               name: q.name + (q.isBot ? ' 🤖' : ''), chips: q.bankroll, connected: isPresent(g, q)
             }))
           }));
-          sendJSON(res, 200, { accounts: accs, tables });
+          sendJSON(res, 200, { accounts: accs, tables, you: auth.who, isOwner: auth.isOwner });
           return;
         }
         if (p === '/api/admin/delete') {
@@ -1114,6 +1245,7 @@ const server = http.createServer(async (req, res) => {
           sendJSON(res, 200, hist);
           return;
         }
+        if (p !== '/api/admin/credit') { sendJSON(res, 404, { error: 'No such admin endpoint.' }); return; }
         const token = String(body.token || '');
         const acc = accounts.get(token);
         if (!acc) { sendJSON(res, 400, { error: 'No such account.' }); return; }
@@ -1137,8 +1269,9 @@ const server = http.createServer(async (req, res) => {
 
       if (p === '/api/account') {
         const { token, acc, created, comped } = getAccount(body.token);
-        if (body.name) acc.name = cleanName(body.name);
-        sendJSON(res, 200, { token, cash: acc.cash, name: acc.name, no: acc.no, pin: acc.pin, created, comped });
+        if (body.name) { acc.name = cleanName(body.name); persistAccount(token); }
+        sendJSON(res, 200, { token, cash: acc.cash, name: acc.name, no: acc.no, pin: acc.pin,
+          compPoints: acc.compPoints || 0, tier: compTier(acc.compPoints), since: acc.since || null, created, comped });
         return;
       }
 
@@ -1162,7 +1295,8 @@ const server = http.createServer(async (req, res) => {
             try { await STORE.deleteAccount(discard); } catch (e) { console.error('[store] deleteAccount failed:', e.message || e); }
           }
         }
-        sendJSON(res, 200, { token, cash: acc.cash, name: acc.name, no: acc.no, pin: acc.pin });
+        sendJSON(res, 200, { token, cash: acc.cash, name: acc.name, no: acc.no, pin: acc.pin,
+          compPoints: acc.compPoints || 0, tier: compTier(acc.compPoints), since: acc.since || null });
         return;
       }
 
@@ -1211,7 +1345,8 @@ const server = http.createServer(async (req, res) => {
       if (p === '/api/bet') {
         if (g.phase !== 'betting') { sendJSON(res, 409, { error: 'Betting is closed.' }); return; }
         const amt = Math.floor(Number(body.amount) || 0);
-        if (amt !== 0 && (amt < 5 || amt > 500)) { sendJSON(res, 400, { error: 'Bet $5 to $500 (or 0 to sit out).' }); return; }
+        const lo = g.config.minBet, hi = g.config.maxBet;
+        if (amt !== 0 && (amt < lo || amt > hi)) { sendJSON(res, 400, { error: 'This table takes $' + lo + ' to $' + hi + ' (or 0 to sit out).' }); return; }
         if (amt > player.bankroll) { sendJSON(res, 400, { error: 'That is more than your chips.' }); return; }
         player.bet = amt;
         bump(g);

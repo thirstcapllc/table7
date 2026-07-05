@@ -14,8 +14,11 @@
 //   logTransaction(entry)          -> append one money-movement row
 //   logHand(entry)                 -> append one played-hand row
 //   getHistory(token, limit)       -> { transactions, hands }
+//   getAdmins()                    -> [ { username, hash, salt } ]  (staff logins)
+//   upsertAdmin(username, rec)     -> add/update a staff admin
+//   deleteAdmin(username)          -> remove a staff admin
 //
-// account shape: { name, cash, comps, no, pin }
+// account shape: { name, cash, comps, compPoints, since, no, pin }
 // transaction entry: { token, type, amount, balanceAfter, tableCode, note }
 // hand entry: { token, tableCode, round, bet, result, payout }
 
@@ -27,20 +30,24 @@ function create() {
   if (process.env.DATABASE_URL) return new PgStore(process.env.DATABASE_URL);
   return new JsonStore(
     process.env.TABLE_CAGE_FILE || path.join(__dirname, 'cage-data.json'),
-    process.env.TABLE_HISTORY_FILE || path.join(__dirname, 'cage-history.json')
+    process.env.TABLE_HISTORY_FILE || path.join(__dirname, 'cage-history.json'),
+    process.env.TABLE_ADMINS_FILE || path.join(__dirname, 'cage-admins.json')
   );
 }
 
 // ---------------------------------------------------------------- JsonStore
 // Local/dev fallback. Debounced disk writes, capped history length.
 class JsonStore {
-  constructor(accountsFile, historyFile) {
+  constructor(accountsFile, historyFile, adminsFile) {
     this.accountsFile = accountsFile;
     this.historyFile = historyFile;
+    this.adminsFile = adminsFile;
     this.accounts = new Map();
     this.transactions = [];
     this.hands = [];
+    this.admins = {}; // username -> { hash, salt, created_at }
     this.saveTimer = null;
+    this.adminTimer = null;
     this.MAX_HISTORY = 20000;
   }
 
@@ -55,7 +62,27 @@ class JsonStore {
       this.transactions = Array.isArray(h.transactions) ? h.transactions : [];
       this.hands = Array.isArray(h.hands) ? h.hands : [];
     } catch (e) { /* first run */ }
+    try { this.admins = JSON.parse(fs.readFileSync(this.adminsFile, 'utf8')) || {}; } catch (e) { this.admins = {}; }
     return this.accounts;
+  }
+
+  async getAdmins() {
+    return Object.keys(this.admins).map(u => Object.assign({ username: u }, this.admins[u]));
+  }
+  async upsertAdmin(username, rec) {
+    this.admins[username] = { hash: rec.hash, salt: rec.salt, created_at: rec.created_at || new Date().toISOString() };
+    this._saveAdminsSoon();
+  }
+  async deleteAdmin(username) {
+    delete this.admins[username];
+    this._saveAdminsSoon();
+  }
+  _saveAdminsSoon() {
+    if (this.adminTimer) return;
+    this.adminTimer = setTimeout(() => {
+      this.adminTimer = null;
+      fs.writeFile(this.adminsFile, JSON.stringify(this.admins, null, 1), () => {});
+    }, 400);
   }
 
   async upsertAccount(token, acc) {
@@ -177,12 +204,24 @@ class PgStore {
       )
     `);
     await this.pool.query(`CREATE INDEX IF NOT EXISTS idx_hands_token ON hands(token, created_at DESC)`);
+    // comp points column (added after the first schema shipped)
+    await this.pool.query(`ALTER TABLE accounts ADD COLUMN IF NOT EXISTS comp_points NUMERIC NOT NULL DEFAULT 0`);
+    // staff admin logins (the owner master key lives in an env var, not here)
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS admins (
+        username TEXT PRIMARY KEY,
+        hash TEXT NOT NULL,
+        salt TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )
+    `);
 
     const { rows } = await this.pool.query('SELECT * FROM accounts');
     const map = new Map();
     for (const r of rows) {
       map.set(r.token, {
         name: r.name || '', cash: Number(r.cash), comps: r.comps || 0,
+        compPoints: Number(r.comp_points || 0), since: r.created_at,
         no: r.player_no, pin: r.pin
       });
     }
@@ -192,17 +231,32 @@ class PgStore {
 
   async upsertAccount(token, acc) {
     await this.pool.query(
-      `INSERT INTO accounts (token, player_no, pin, name, cash, comps, created_at, last_seen)
-       VALUES ($1,$2,$3,$4,$5,$6, now(), now())
+      `INSERT INTO accounts (token, player_no, pin, name, cash, comps, comp_points, created_at, last_seen)
+       VALUES ($1,$2,$3,$4,$5,$6,$7, now(), now())
        ON CONFLICT (token) DO UPDATE SET
          player_no = EXCLUDED.player_no, pin = EXCLUDED.pin, name = EXCLUDED.name,
-         cash = EXCLUDED.cash, comps = EXCLUDED.comps, last_seen = now()`,
-      [token, acc.no, acc.pin, acc.name || '', acc.cash, acc.comps || 0]
+         cash = EXCLUDED.cash, comps = EXCLUDED.comps, comp_points = EXCLUDED.comp_points, last_seen = now()`,
+      [token, acc.no, acc.pin, acc.name || '', acc.cash, acc.comps || 0, acc.compPoints || 0]
     );
   }
 
   async deleteAccount(token) {
     await this.pool.query('DELETE FROM accounts WHERE token = $1', [token]);
+  }
+
+  async getAdmins() {
+    const { rows } = await this.pool.query('SELECT username, hash, salt, created_at FROM admins');
+    return rows;
+  }
+  async upsertAdmin(username, rec) {
+    await this.pool.query(
+      `INSERT INTO admins (username, hash, salt) VALUES ($1,$2,$3)
+       ON CONFLICT (username) DO UPDATE SET hash = EXCLUDED.hash, salt = EXCLUDED.salt`,
+      [username, rec.hash, rec.salt]
+    );
+  }
+  async deleteAdmin(username) {
+    await this.pool.query('DELETE FROM admins WHERE username = $1', [username]);
   }
 
   async logTransaction(entry) {
