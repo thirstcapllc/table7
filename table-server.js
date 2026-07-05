@@ -1018,7 +1018,11 @@ setInterval(() => {
 // is just the polling fallback). Every POST /api/* is bucketed by tier.
 const rateBuckets = new Map(); // "tier:ip" -> { count, resetAt }
 function rateRule(pathname) {
-  if (pathname === '/api/login' || pathname.startsWith('/api/admin/'))
+  // Only the credential-guessing surfaces get the strict limit. Everything
+  // else under /api/admin/* is already gated by a session or the owner key,
+  // so it uses the generous gameplay tier — otherwise the admin console's own
+  // 5-second auto-refresh would trip the limit.
+  if (pathname === '/api/login' || pathname === '/api/admin/login')
     return { tier: 'strict', max: RATE_LOGIN_MAX };
   if (pathname === '/api/join' || pathname === '/api/account')
     return { tier: 'moderate', max: RATE_JOIN_MAX };

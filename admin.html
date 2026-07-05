@@ -178,7 +178,7 @@
 
   var session = '';
   try { session = localStorage.getItem('t7-admin-session') || ''; } catch (e) {}
-  var isOwner = false, refreshTimer = null;
+  var isOwner = false, refreshTimer = null, staffLoaded = false;
 
   function post(path, body) {
     return fetch(path, {
@@ -213,7 +213,7 @@
 
   function lockUp(msg) {
     if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
-    session = ''; try { localStorage.removeItem('t7-admin-session'); } catch (e) {}
+    session = ''; staffLoaded = false; try { localStorage.removeItem('t7-admin-session'); } catch (e) {}
     $('panel').style.display = 'none'; $('lock').style.display = 'block';
     $('lockErr').textContent = msg || '';
   }
@@ -256,7 +256,8 @@
     }).join('') || '<tr><td colspan="5" class="muted">No tables open right now.</td></tr>';
 
     $('staffSec').style.display = isOwner ? 'block' : 'none';
-    if (isOwner) loadStaff();
+    // only load the staff list once (on entry), not on every 5s auto-refresh
+    if (isOwner && !staffLoaded) { staffLoaded = true; loadStaff(); }
   }
 
   function refresh() {
