@@ -58,6 +58,22 @@ export class CageService {
     return this.prisma.account.update({ where: { token }, data: { name: clean } });
   }
 
+  async resetPin(token: string) {
+    const pin = this.newPin();
+    await this.prisma.account.update({ where: { token }, data: { pin } });
+    return pin;
+  }
+
+  /** Admin cash adjustment (credit if positive, dock if negative). */
+  async adjustCash(token: string, amount: number) {
+    const acc = await this.byToken(token);
+    if (!acc) return null;
+    const cash = Math.max(0, acc.cash + amount);
+    await this.prisma.account.update({ where: { token }, data: { cash } });
+    await this.log(token, amount > 0 ? 'admin_credit' : 'admin_dock', amount, cash, { note: 'pit boss adjustment' });
+    return cash;
+  }
+
   async log(token: string, type: string, amount: number, balanceAfter: number,
             opts: { game?: string; tableCode?: string; note?: string } = {}) {
     await this.prisma.transaction.create({

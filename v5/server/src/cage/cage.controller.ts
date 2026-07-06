@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Post } from '@nestjs/common';
 import { CageService } from './cage.service';
 
 @Controller()
@@ -12,6 +12,7 @@ export class CageController {
 
   /** Load or create the caller's account; optionally set the name. */
   @Post('account')
+  @HttpCode(200)
   async account(@Body() body: { token?: string; name?: string }) {
     let { account, created, comped } = await this.cage.getOrCreate(body.token);
     if (body.name) account = await this.cage.setName(account.token, body.name);
@@ -20,6 +21,7 @@ export class CageController {
 
   /** A player's own card summary + credits/debits + round history (token-authed). */
   @Post('my-history')
+  @HttpCode(200)
   async myHistory(@Body() body: { token: string }) {
     const acc = await this.cage.byToken(String(body.token || ''));
     if (!acc) return { error: 'Unknown account.' };
